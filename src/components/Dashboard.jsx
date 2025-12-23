@@ -10,10 +10,24 @@ function Dashboard({ balances, loading, error }) {
                 </div>
             ) : error ? (
                 <div className="w-full bg-red-900/20 border border-red-500/30 rounded-[32px] p-6 flex flex-col items-center justify-center text-center">
-                    <p className="text-red-400 font-medium mb-2">Unable to load balance</p>
-                    <p className="text-gray-500 text-xs mb-4">{error}</p>
-                    <button onClick={() => window.location.reload()} className="px-4 py-2 bg-red-600/20 text-red-500 rounded-xl text-xs font-bold hover:bg-red-600/30 transition-all">
-                        Retry
+                    <p className="text-red-400 font-medium mb-1">Connection Issue</p>
+                    <p className="text-gray-400 text-sm mb-4">{error}</p>
+                    {error.includes("Token") && (
+                        <p className="text-xs text-gray-500 mb-4 bg-black/30 p-2 rounded">
+                            Add <span className="text-yellow-500">VITE_DERIV_API_TOKEN</span> to your .env file
+                        </p>
+                    )}
+                    <button onClick={() => window.location.reload()} className="px-5 py-2.5 bg-red-600 text-white rounded-xl text-sm font-bold hover:bg-red-700 transition-all shadow-lg shadow-red-900/20">
+                        Retry Connection
+                    </button>
+                    {/* Fallback option */}
+                    <button onClick={() => {
+                        // Temp force demo mode
+                        const demoData = { deriv: 2500.50, mpesa: 1000, isDemo: true };
+                        // This won't persist but helps development
+                        window.dispatchEvent(new CustomEvent('force_demo_update'));
+                    }} className="mt-4 text-xs text-gray-600 hover:text-gray-400 underline">
+                        Use Demo Data
                     </button>
                 </div>
             ) : (
@@ -39,7 +53,7 @@ function Dashboard({ balances, loading, error }) {
                                     )}
                                 </div>
                             </div>
-                            <button className="text-gray-400 p-1">
+                            <button className="text-gray-400 p-1 hover:bg-white/5 rounded-full transition-colors">
                                 <MoreVertical className="w-5 h-5" />
                             </button>
                         </div>
@@ -49,6 +63,7 @@ function Dashboard({ balances, loading, error }) {
                             <h2 className="text-4xl font-bold text-white tracking-tight">
                                 ${balances.deriv.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                             </h2>
+                            {balances?.isDemo && <p className="text-yellow-500/50 text-xs mt-1">Mock Balance</p>}
                         </div>
 
                         {/* Footer / Stats */}

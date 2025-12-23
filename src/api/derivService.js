@@ -1,12 +1,19 @@
 // Deriv API Service using WebSocket
 class DerivAPI {
     constructor(apiToken) {
-        this.apiToken = apiToken;
+        // Sanitize token: remove whitespace and potential quotes
+        this.apiToken = apiToken ? String(apiToken).trim().replace(/^['"]|['"]$/g, '') : '';
         this.ws = null;
         this.requestId = 0;
         this.callbacks = new Map();
         this.isConnected = false;
         this.balance = 0;
+        console.log(`DerivAPI Initialized. Token length: ${this.apiToken.length}`);
+        if (this.apiToken.length > 4) {
+            console.log(`Token preview: ${this.apiToken.substring(0, 4)}...`);
+        } else {
+            console.log('Token is too short or empty.');
+        }
     }
 
     connect() {
@@ -86,15 +93,24 @@ class DerivAPI {
     }
 
     async authorize() {
-        const response = await this.send({
-            authorize: this.apiToken
-        });
+        try {
+            const response = await this.send({
+                authorize: this.apiToken
+            });
 
-        if (response.authorize) {
-            console.log('Authorized:', response.authorize);
-            // Subscribe to balance updates
-            await this.subscribeToBalance();
-            return response.authorize;
+            if (response.authorize) {
+                console.log('Authorized:', response.authorize);
+                // Subscribe to balance updates
+                await this.subscribeToBalance();
+                return response.authorize;
+            }
+        } catch (error) {
+            console.error('Authorization failed details:', error);
+            // If it's a validation error, it's likely the token format
+            if (error.error && error.error.code === 'InputValidationFailed') {
+                throw new Error('Invalid Token Format. Please check your .env file.');
+            }
+            throw new Error(error.message || 'Authorization failed');
         }
         throw new Error('Authorization failed');
     }
@@ -155,11 +171,27 @@ export function getDerivAPI() {
 
 export async function getBalances() {
     try {
-        const token = import.meta.env.VITE_DERIV_API_TOKEN;
+        let token = import.meta.env.VITE_DERIV_API_TOKEN;
 
-        // Development mode: Use demo data if no token or invalid token
-        if (!token || token === 'demo') {
-            console.warn('🎮 DEMO MODE: Using mock Deriv balance. Set VITE_DERIV_API_TOKEN for real data.');
+        // Sanitize token: remove whitespace and potential quotes if user added them
+        if (token) {
+            token = String(token).trim().replace(/^['"]|['"]$/g, '');
+        }
+
+        // Check for explicit demo mode or missing token
+        if (!token) {
+            console.warn('⚠️ Deriv Service: VITE_DERIV_API_TOKEN is missing in .env');
+            console.warn('🎮 DEMO MODE: Falling back to mock data due to missing configuration.');
+            return {
+                mpesa: 1000.0,
+                deriv: 2500.50, // Demo balance
+                isDemo: true,
+                error: 'Configuration Missing: VITE_DERIV_API_TOKEN'
+            };
+        }
+
+        if (token === 'demo') {
+            console.log('🎮 Deriv Service: Demo mode requested via config.');
             return {
                 mpesa: 1000.0,
                 deriv: 2500.50, // Demo balance
@@ -167,27 +199,35 @@ export async function getBalances() {
             };
         }
 
+        // Initialize and connect
         if (!derivAPIInstance || !derivAPIInstance.isConnected) {
+            console.log('🔌 Deriv Service: Initializing connection with token...');
             await initializeDerivAPI(token);
         }
 
+        // Double check connection status
+        if (!derivAPIInstance.isConnected) {
+            throw new Error('Failed to establish connection to Deriv API');
+        }
+
+        console.log('💰 Deriv Service: Fetching real balance...');
         const derivBalance = await derivAPIInstance.getBalance();
+        console.log('✅ Deriv Service: Balance fetched:', derivBalance);
 
         return {
-            mpesa: 1000.0, // Mock M-Pesa balance
+            mpesa: 1000.0, // Mock M-Pesa balance (until integrated)
             deriv: derivBalance,
             isDemo: false
         };
     } catch (error) {
-        console.error('Error fetching balances:', error);
+        console.error('❌ Deriv Service Error:', error);
 
-        // Fallback to demo mode on error (e.g., invalid token, network issues)
-        console.warn('⚠️ Falling back to DEMO MODE due to error:', error.message);
+        // Return error state so UI can show it, instead of silently faking it
         return {
             mpesa: 1000.0,
-            deriv: 2500.50,
-            isDemo: true,
-            error: error.message
+            deriv: 0,
+            isDemo: false, // It's not demo mode, it's broken mode
+            error: error.message || 'Connection Failed'
         };
     }
 }
@@ -195,17 +235,14 @@ export async function getBalances() {
 export async function processTransaction({ type, amount }) {
     try {
         if (!derivAPIInstance || !derivAPIInstance.isConnected) {
-            const token = import.meta.env.VITE_DERIV_API_TOKEN || '***********3bVg';
+            const token = import.meta.env.VITE_DERIV_API_TOKEN;
+            if (!token) throw new Error('API Token not configured');
+            // Constructor will sanitize it
             await initializeDerivAPI(token);
         }
 
         // Simulate network latency
         await new Promise(res => setTimeout(res, 800));
-
-        // For now, we'll simulate the transaction since we need M-Pesa integration
-        // In production, you would:
-        // 1. For deposit: Deduct from M-Pesa, then deposit to Deriv
-        // 2. For withdraw: Withdraw from Deriv, then credit to M-Pesa
 
         // Get current balance
         const currentBalance = await derivAPIInstance.getBalance();
@@ -218,7 +255,6 @@ export async function processTransaction({ type, amount }) {
         if (type === 'deposit') {
             // In production: Call M-Pesa API to deduct amount
             // Then deposit to Deriv (Deriv API doesn't support direct deposits via API)
-            // For now, we'll just return updated balances
             console.log(`Simulating deposit of $${amount} to Deriv`);
         } else if (type === 'withdraw') {
             // Check if sufficient balance
@@ -231,8 +267,8 @@ export async function processTransaction({ type, amount }) {
             throw new Error('Invalid transaction type');
         }
 
-        // Return simulated balances
-        // Note: Real implementation would update after actual transactions
+        // Re-fetch balance to ensure it's up to date (in case of real changes)
+        // For simulation, we return the calculated new states since we can't actually change the Deriv balance via API easily for deposit
         const newBalances = {
             mpesa: type === 'deposit' ? 1000 - amount : 1000 + amount,
             deriv: type === 'deposit' ? currentBalance + amount : currentBalance - amount

@@ -36,8 +36,15 @@ function DashboardPage() {
             try {
                 // Fetch Balances
                 const balanceData = await getBalances();
-                setBalances(balanceData);
-                setError(null); // Clear any previous errors
+
+                if (balanceData.error) {
+                    setError(balanceData.error);
+                    // Still set balances to avoid null reference, but error state will take precedence in UI
+                    setBalances(balanceData);
+                } else {
+                    setBalances(balanceData);
+                    setError(null);
+                }
 
                 // Fetch History
                 if (user?.id) {

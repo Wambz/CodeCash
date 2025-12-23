@@ -5,6 +5,8 @@ import { Wallet } from 'lucide-react';
 function SignupPage() {
     const navigate = useNavigate();
     const [formData, setFormData] = useState({
+        firstName: '',
+        lastName: '',
         email: '',
         phone: '',
         crNumber: '',
@@ -30,7 +32,7 @@ function SignupPage() {
         setError('');
 
         // Validation
-        if (!formData.email || !formData.phone || !formData.password) {
+        if (!formData.firstName || !formData.lastName || !formData.email || !formData.phone || !formData.password) {
             setError('Please fill in all required fields');
             return;
         }
@@ -55,7 +57,8 @@ function SignupPage() {
                     'Content-Type': 'application/json',
                 },
                 body: JSON.stringify({
-                    name: formData.email.split('@')[0], // Use email prefix as name
+                    firstName: formData.firstName,
+                    lastName: formData.lastName,
                     email: formData.email,
                     password: formData.password,
                     phone: formData.phone
@@ -103,6 +106,44 @@ function SignupPage() {
                 <div className="glass-effect rounded-2xl p-8 border border-white/10">
                     <form className="flex flex-col gap-4 w-full" onSubmit={handleSubmit}>
 
+                        {/* First Name Field */}
+                        <div className="space-y-1">
+                            <label className="text-xs font-medium text-gray-400 ml-1">First Name</label>
+                            <div className="relative group">
+                                <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
+                                    <span className="material-symbols-outlined text-gray-500 group-focus-within:text-red-500 transition-colors">person</span>
+                                </div>
+                                <input
+                                    id="firstName"
+                                    type="text"
+                                    value={formData.firstName}
+                                    onChange={handleChange}
+                                    className="w-full bg-black/50 text-white placeholder-gray-600 rounded-xl border border-white/10 focus:border-red-500 focus:ring-1 focus:ring-red-500/20 h-12 pl-11 pr-4 transition-all text-sm"
+                                    placeholder="John"
+                                    required
+                                />
+                            </div>
+                        </div>
+
+                        {/* Last Name Field */}
+                        <div className="space-y-1">
+                            <label className="text-xs font-medium text-gray-400 ml-1">Last Name</label>
+                            <div className="relative group">
+                                <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
+                                    <span className="material-symbols-outlined text-gray-500 group-focus-within:text-red-500 transition-colors">person</span>
+                                </div>
+                                <input
+                                    id="lastName"
+                                    type="text"
+                                    value={formData.lastName}
+                                    onChange={handleChange}
+                                    className="w-full bg-black/50 text-white placeholder-gray-600 rounded-xl border border-white/10 focus:border-red-500 focus:ring-1 focus:ring-red-500/20 h-12 pl-11 pr-4 transition-all text-sm"
+                                    placeholder="Doe"
+                                    required
+                                />
+                            </div>
+                        </div>
+
                         {/* Email Field */}
                         <div className="space-y-1">
                             <label className="text-xs font-medium text-gray-400 ml-1">Email Address</label>
@@ -117,6 +158,7 @@ function SignupPage() {
                                     onChange={handleChange}
                                     className="w-full bg-black/50 text-white placeholder-gray-600 rounded-xl border border-white/10 focus:border-red-500 focus:ring-1 focus:ring-red-500/20 h-12 pl-11 pr-4 transition-all text-sm"
                                     placeholder="name@example.com"
+                                    required
                                 />
                             </div>
                         </div>
@@ -135,6 +177,7 @@ function SignupPage() {
                                     onChange={handleChange}
                                     className="w-full bg-black/50 text-white placeholder-gray-600 rounded-xl border border-white/10 focus:border-red-500 focus:ring-1 focus:ring-red-500/20 h-12 pl-11 pr-4 transition-all text-sm"
                                     placeholder="+254 7XX XXX XXX"
+                                    required
                                 />
                             </div>
                         </div>
@@ -153,6 +196,7 @@ function SignupPage() {
                                     onChange={handleChange}
                                     className="w-full bg-black/50 text-white placeholder-gray-600 rounded-xl border border-white/10 focus:border-red-500 focus:ring-1 focus:ring-red-500/20 h-12 pl-11 pr-4 transition-all text-sm"
                                     placeholder="e.g. CR123456"
+                                    required
                                 />
                             </div>
                         </div>
@@ -171,6 +215,7 @@ function SignupPage() {
                                     onChange={handleChange}
                                     className="w-full bg-black/50 text-white placeholder-gray-600 rounded-xl border border-white/10 focus:border-red-500 focus:ring-1 focus:ring-red-500/20 h-12 pl-11 pr-12 transition-all text-sm"
                                     placeholder="Create a strong password"
+                                    required
                                 />
                                 <button
                                     type="button"
