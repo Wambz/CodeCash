@@ -107,12 +107,7 @@ function WelcomePage() {
                         </button>
                     </form>
 
-                    {/* Demo Hint */}
-                    <div className="mt-6 p-3 bg-gray-800/50 rounded-lg text-center">
-                        <p className="text-xs text-gray-400">
-                            Demo: Enter any email and password to continue
-                        </p>
-                    </div>
+
 
                     {/* Sign Up Link */}
                     <div className="mt-6 text-center">

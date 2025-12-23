@@ -1,16 +1,41 @@
 import sql from 'mssql';
-import 'dotenv/config';
+import dotenv from 'dotenv';
+
+dotenv.config();
+
+// Parse server and instance name
+const serverParts = (process.env.DB_SERVER || 'localhost').split('\\');
+const serverName = serverParts[0];
+const instanceName = serverParts[1];
 
 const config = {
-    user: process.env.DB_USER,
-    password: process.env.DB_PASSWORD,
-    server: process.env.DB_SERVER,
-    database: process.env.DB_NAME,
+    server: serverName,
+    database: process.env.DB_NAME || 'CodeCashDB',
     options: {
-        encrypt: true, // Use this if you're on Azure.
-        trustServerCertificate: true // Change to true for local dev / self-signed certs
+        encrypt: true,
+        trustServerCertificate: true,
+        enableArithAbort: true,
+        instanceName: instanceName || undefined
     }
 };
+
+console.log('🔧 DB Config:', { server: config.server, instance: config.options.instanceName, database: config.database });
+
+// Use Windows Authentication if no user is specified
+if (process.env.DB_USER) {
+    config.user = process.env.DB_USER;
+    config.password = process.env.DB_PASSWORD;
+} else {
+    // Windows Authentication
+    config.authentication = {
+        type: 'ntlm',
+        options: {
+            domain: '',
+            userName: '',
+            password: ''
+        }
+    };
+}
 
 const poolPromise = new sql.ConnectionPool(config)
     .connect()
