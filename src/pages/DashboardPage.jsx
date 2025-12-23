@@ -22,6 +22,7 @@ function DashboardPage() {
         localStorage.setItem('codecash_balances', JSON.stringify(balances));
     }, [balances]);
     const [loading, setLoading] = useState(false);
+    const [error, setError] = useState(null);
     const [showDepositModal, setShowDepositModal] = useState(false);
     const [showWithdrawModal, setShowWithdrawModal] = useState(false);
 
@@ -31,6 +32,7 @@ function DashboardPage() {
     useEffect(() => {
         async function fetchData() {
             setLoading(true);
+            setError(null);
             try {
                 // Fetch Balances
                 const balanceData = await getBalances();
@@ -50,6 +52,7 @@ function DashboardPage() {
                 }
             } catch (error) {
                 console.error("Dashboard fetch error", error);
+                setError(error.message);
             } finally {
                 setLoading(false);
             }
@@ -91,7 +94,7 @@ function DashboardPage() {
             <main className="px-5">
                 {/* Hero Balance Card */}
                 <div className="mb-8">
-                    <Dashboard balances={balances} loading={loading} />
+                    <Dashboard balances={balances} loading={loading} error={error} />
                 </div>
 
                 {/* Big Action Buttons */}

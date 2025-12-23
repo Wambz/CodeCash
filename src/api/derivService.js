@@ -12,6 +12,11 @@ class DerivAPI {
     connect() {
         return new Promise((resolve, reject) => {
             try {
+                if (this.ws && (this.ws.readyState === WebSocket.OPEN || this.ws.readyState === WebSocket.CONNECTING)) {
+                    resolve();
+                    return;
+                }
+
                 this.ws = new WebSocket('wss://ws.derivws.com/websockets/v3?app_id=1089');
 
                 this.ws.onopen = () => {
@@ -135,6 +140,10 @@ let derivAPIInstance = null;
 export async function initializeDerivAPI(apiToken) {
     if (!derivAPIInstance) {
         derivAPIInstance = new DerivAPI(apiToken);
+    }
+
+    // Always ensure we are connected
+    if (!derivAPIInstance.isConnected) {
         await derivAPIInstance.connect();
     }
     return derivAPIInstance;
@@ -147,8 +156,9 @@ export function getDerivAPI() {
 export async function getBalances() {
     try {
         if (!derivAPIInstance || !derivAPIInstance.isConnected) {
-            // Initialize with token from environment or use provided token
-            const token = import.meta.env.VITE_DERIV_API_TOKEN || '***********3bVg';
+            // Initialize with token from environment or let it fail if missing
+            const token = import.meta.env.VITE_DERIV_API_TOKEN;
+            if (!token) throw new Error("Missing Deriv API Token");
             await initializeDerivAPI(token);
         }
 
@@ -161,11 +171,7 @@ export async function getBalances() {
         };
     } catch (error) {
         console.error('Error fetching balances:', error);
-        // Fallback to mock data if API fails
-        return {
-            mpesa: 1000.0,
-            deriv: 500.0
-        };
+        throw error; // Propagate error to UI
     }
 }
 

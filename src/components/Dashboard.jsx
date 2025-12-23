@@ -1,12 +1,20 @@
 import React from 'react';
 import { MoreVertical, Wallet, TrendingUp, Loader2 } from 'lucide-react';
 
-function Dashboard({ balances, loading }) {
+function Dashboard({ balances, loading, error }) {
     return (
         <section className="animate-fade-in w-full">
             {loading ? (
                 <div className="flex items-center justify-center py-12">
                     <Loader2 className="w-8 h-8 text-red-600 animate-spin" />
+                </div>
+            ) : error ? (
+                <div className="w-full bg-red-900/20 border border-red-500/30 rounded-[32px] p-6 flex flex-col items-center justify-center text-center">
+                    <p className="text-red-400 font-medium mb-2">Unable to load balance</p>
+                    <p className="text-gray-500 text-xs mb-4">{error}</p>
+                    <button onClick={() => window.location.reload()} className="px-4 py-2 bg-red-600/20 text-red-500 rounded-xl text-xs font-bold hover:bg-red-600/30 transition-all">
+                        Retry
+                    </button>
                 </div>
             ) : (
                 <div className="w-full">
