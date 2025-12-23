@@ -3,6 +3,46 @@ import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { ArrowLeft, User, LogOut, ChevronRight, Shield, Bell, CircleHelp, Settings, X, Phone, Lock, MoreHorizontal, CheckCircle, Save } from 'lucide-react';
 
+
+const MenuItem = ({ icon: Icon, label, subLabel, onClick, textColor = "text-white", iconColor = "text-gray-400", bgColor = "bg-[#1c1c1e]" }) => (
+    <button
+        onClick={onClick}
+        className={`w-full flex items-center justify-between p-4 ${bgColor} border border-white/5 rounded-2xl mb-3 hover:bg-white/5 transition-all active:scale-98`}
+    >
+        <div className="flex items-center gap-4">
+            <div className={`w-10 h-10 rounded-full bg-white/5 flex items-center justify-center`}>
+                {Icon ? <Icon className={`w-5 h-5 ${iconColor}`} /> : <span className="text-red-500">?</span>}
+            </div>
+            <div className="text-left">
+                <span className={`font-medium block ${textColor}`}>{label}</span>
+                {subLabel && <span className="text-xs text-gray-500">{subLabel}</span>}
+            </div>
+        </div>
+        <ChevronRight className="w-5 h-5 text-gray-600" />
+    </button>
+);
+
+const Modal = ({ title, onClose, children }) => (
+    <div className="fixed inset-0 z-[60] flex items-end sm:items-center justify-center pointer-events-none">
+        {/* Backdrop */}
+        <div
+            className="absolute inset-0 bg-black/60 backdrop-blur-sm pointer-events-auto transition-opacity"
+            onClick={onClose}
+        ></div>
+
+        {/* Content */}
+        <div className="w-full sm:w-[400px] bg-[#1c1c1e] rounded-t-[30px] sm:rounded-[30px] p-6 pb-10 border-t border-white/10 relative z-10 pointer-events-auto animate-slide-up">
+            <div className="flex justify-between items-center mb-6">
+                <h3 className="text-xl font-bold">{title}</h3>
+                <button onClick={onClose} className="w-8 h-8 flex items-center justify-center bg-white/5 rounded-full">
+                    <X className="w-5 h-5 text-gray-400" />
+                </button>
+            </div>
+            {children}
+        </div>
+    </div>
+);
+
 function ProfilePage() {
     const navigate = useNavigate();
     const { user, signOut, updateUser } = useAuth();
@@ -10,6 +50,7 @@ function ProfilePage() {
     const [history, setHistory] = useState([]);
     const [loading, setLoading] = useState(true);
     const [activeModal, setActiveModal] = useState(null); // 'mt5', 'phone', 'password', 'help', 'settings'
+    const [passwordData, setPasswordData] = useState({ currentPassword: '', newPassword: '' });
     const fileInputRef = React.useRef(null);
 
     React.useEffect(() => {
@@ -17,7 +58,8 @@ function ProfilePage() {
         const fetchHistory = async () => {
             if (!user?.id) return;
             try {
-                const response = await fetch(`http://127.0.0.1:5000/api/transactions/${user.id}`);
+                const API_URL = import.meta.env.VITE_API_URL || 'http://127.0.0.1:5000';
+                const response = await fetch(`${API_URL}/api/transactions/${user.id}`);
                 const data = await response.json();
                 if (data.success) {
                     setHistory(data.history);
@@ -44,6 +86,37 @@ function ProfilePage() {
                 updateUser({ avatar: reader.result });
             };
             reader.readAsDataURL(file);
+        }
+    };
+
+    const handlePasswordChange = async () => {
+        if (!passwordData.currentPassword || !passwordData.newPassword) {
+            alert('Please fill in all fields');
+            return;
+        }
+
+        try {
+            const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000';
+            const response = await fetch(`${API_URL}/api/auth/change-password`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    userId: user.id,
+                    currentPassword: passwordData.currentPassword,
+                    newPassword: passwordData.newPassword
+                })
+            });
+            const data = await response.json();
+            if (data.success) {
+                alert('Password updated successfully');
+                setActiveModal(null);
+                setPasswordData({ currentPassword: '', newPassword: '' });
+            } else {
+                alert(data.message || 'Failed to update password');
+            }
+        } catch (error) {
+            console.error('Password update error:', error);
+            alert('Network error. Please try again.');
         }
     };
 
@@ -113,45 +186,6 @@ function ProfilePage() {
         }).join(' ');
     };
 
-    const MenuItem = ({ icon: Icon, label, subLabel, onClick, textColor = "text-white", iconColor = "text-gray-400", bgColor = "bg-[#1c1c1e]" }) => (
-        <button
-            onClick={onClick}
-            className={`w-full flex items-center justify-between p-4 ${bgColor} border border-white/5 rounded-2xl mb-3 hover:bg-white/5 transition-all active:scale-98`}
-        >
-            <div className="flex items-center gap-4">
-                <div className={`w-10 h-10 rounded-full bg-white/5 flex items-center justify-center`}>
-                    <Icon className={`w-5 h-5 ${iconColor}`} />
-                </div>
-                <div className="text-left">
-                    <span className={`font-medium block ${textColor}`}>{label}</span>
-                    {subLabel && <span className="text-xs text-gray-500">{subLabel}</span>}
-                </div>
-            </div>
-            <ChevronRight className="w-5 h-5 text-gray-600" />
-        </button>
-    );
-
-    const Modal = ({ title, onClose, children }) => (
-        <div className="fixed inset-0 z-[60] flex items-end sm:items-center justify-center pointer-events-none">
-            {/* Backdrop */}
-            <div
-                className="absolute inset-0 bg-black/60 backdrop-blur-sm pointer-events-auto transition-opacity"
-                onClick={onClose}
-            ></div>
-
-            {/* Content */}
-            <div className="w-full sm:w-[400px] bg-[#1c1c1e] rounded-t-[30px] sm:rounded-[30px] p-6 pb-10 border-t border-white/10 relative z-10 pointer-events-auto animate-slide-up">
-                <div className="flex justify-between items-center mb-6">
-                    <h3 className="text-xl font-bold">{title}</h3>
-                    <button onClick={onClose} className="w-8 h-8 flex items-center justify-center bg-white/5 rounded-full">
-                        <X className="w-5 h-5 text-gray-400" />
-                    </button>
-                </div>
-                {children}
-            </div>
-        </div>
-    );
-
     return (
         <div className="min-h-screen bg-[#050505] text-white overflow-y-auto custom-scrollbar font-[Inter] pb-20">
             {/* Header */}
@@ -175,7 +209,7 @@ function ProfilePage() {
 
                     <div className="relative flex flex-col items-center">
                         <div className="relative mb-6" onClick={() => fileInputRef.current?.click()}>
-                            <div className="w-28 h-28 rounded-3xl p-1 bg-gradient-to-tr from-red-600 via-red-500 to-purple-600 transition-transform group-hover:scale-105 duration-500">
+                            <div className="w-28 h-28 rounded-3xl p-1 bg-gradient-to-tr from-red-600 via-red-900 to-black transition-transform group-hover:scale-105 duration-500">
                                 <img
                                     src={user?.avatar || `https://api.dicebear.com/7.x/avataaars/svg?seed=${user?.email || 'user'}`}
                                     alt="avatar"
@@ -314,42 +348,41 @@ function ProfilePage() {
                     </div>
                 </div>
 
-                {/* Account Settings */}
                 <h3 className="text-xs font-bold text-gray-500 mb-4 px-2 tracking-wider uppercase">Account Settings</h3>
                 <div className="space-y-3">
                     <MenuItem
                         icon={MoreHorizontal}
                         label="Change MT5 Account"
                         subLabel="Manage trading accounts"
-                        iconColor="text-purple-400"
+                        iconColor="text-red-500"
                         onClick={() => setActiveModal('mt5')}
                     />
                     <MenuItem
                         icon={Phone}
                         label="Change Phone Number"
                         subLabel="+254 7** *** **89"
-                        iconColor="text-purple-400"
+                        iconColor="text-red-500"
                         onClick={() => setActiveModal('phone')}
                     />
                     <MenuItem
                         icon={Lock}
                         label="Change Password"
                         subLabel="Update your security"
-                        iconColor="text-purple-400"
+                        iconColor="text-red-500"
                         onClick={() => setActiveModal('password')}
                     />
                     <MenuItem
                         icon={CircleHelp}
                         label="Help & Feedback"
                         subLabel="FAQs and support"
-                        iconColor="text-purple-400"
+                        iconColor="text-red-500"
                         onClick={() => setActiveModal('help')}
                     />
                     <MenuItem
                         icon={Settings}
                         label="Other Settings"
                         subLabel="Preferences and options"
-                        iconColor="text-purple-400"
+                        iconColor="text-red-500"
                         onClick={() => setActiveModal('settings')}
                     />
                 </div>
@@ -404,9 +437,24 @@ function ProfilePage() {
             {activeModal === 'password' && (
                 <Modal title="Change Password" onClose={() => setActiveModal(null)}>
                     <div className="space-y-4">
-                        <input type="password" placeholder="Current Password" className="w-full p-4 bg-black/50 border border-white/10 rounded-xl text-white outline-none focus:border-red-500 transition-all" />
-                        <input type="password" placeholder="New Password" className="w-full p-4 bg-black/50 border border-white/10 rounded-xl text-white outline-none focus:border-red-500 transition-all" />
-                        <button className="w-full bg-red-600 p-4 rounded-xl font-bold flex items-center justify-center gap-2 hover:bg-red-500 transition-all">
+                        <input
+                            type="password"
+                            placeholder="Current Password"
+                            value={passwordData.currentPassword}
+                            onChange={(e) => setPasswordData({ ...passwordData, currentPassword: e.target.value })}
+                            className="w-full p-4 bg-black/50 border border-white/10 rounded-xl text-white outline-none focus:border-red-500 transition-all"
+                        />
+                        <input
+                            type="password"
+                            placeholder="New Password"
+                            value={passwordData.newPassword}
+                            onChange={(e) => setPasswordData({ ...passwordData, newPassword: e.target.value })}
+                            className="w-full p-4 bg-black/50 border border-white/10 rounded-xl text-white outline-none focus:border-red-500 transition-all"
+                        />
+                        <button
+                            onClick={handlePasswordChange}
+                            className="w-full bg-red-600 p-4 rounded-xl font-bold flex items-center justify-center gap-2 hover:bg-red-500 transition-all"
+                        >
                             <Save className="w-5 h-5" /> Update Password
                         </button>
                     </div>

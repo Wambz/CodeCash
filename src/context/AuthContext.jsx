@@ -17,7 +17,8 @@ export function AuthProvider({ children }) {
 
     const signIn = async (email, password) => {
         try {
-            const response = await fetch('http://127.0.0.1:5000/api/auth/login', {
+            const API_URL = import.meta.env.VITE_API_URL || 'http://127.0.0.1:5000';
+            const response = await fetch(`${API_URL}/api/auth/login`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ email, password })
@@ -34,24 +35,8 @@ export function AuthProvider({ children }) {
                 throw new Error(data.message || 'Login failed');
             }
         } catch (error) {
-            console.error("API Login failed, using mock fallback:", error);
-            // Fallback for demo/dev if DB isn't set up yet
-            return new Promise((resolve, reject) => {
-                setTimeout(() => {
-                    if (email && password) {
-                        const mockUser = {
-                            id: '1',
-                            email: email,
-                            name: email.split('@')[0],
-                        };
-                        setUser(mockUser);
-                        localStorage.setItem('codecash_user', JSON.stringify(mockUser));
-                        resolve(mockUser);
-                    } else {
-                        reject(new Error('Invalid credentials'));
-                    }
-                }, 800);
-            });
+            console.error("API Login failed:", error);
+            throw error;
         }
     };
 
@@ -69,11 +54,18 @@ export function AuthProvider({ children }) {
             localStorage.setItem('codecash_user', JSON.stringify(updatedUser));
 
             if (user?.id) {
-                await fetch('http://127.0.0.1:5000/api/auth/update', {
+                const API_URL = import.meta.env.VITE_API_URL || 'http://127.0.0.1:5000';
+                const response = await fetch(`${API_URL}/api/auth/update`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ id: user.id, ...updates })
                 });
+
+                const data = await response.json();
+                if (!data.success) {
+                    console.error("Backend update failed:", data.message);
+                    // Revert optimistic update if needed, but for now just log
+                }
             }
         } catch (error) {
             console.error("Failed to sync update to backend", error);
