@@ -155,23 +155,40 @@ export function getDerivAPI() {
 
 export async function getBalances() {
     try {
+        const token = import.meta.env.VITE_DERIV_API_TOKEN;
+
+        // Development mode: Use demo data if no token or invalid token
+        if (!token || token === 'demo') {
+            console.warn('🎮 DEMO MODE: Using mock Deriv balance. Set VITE_DERIV_API_TOKEN for real data.');
+            return {
+                mpesa: 1000.0,
+                deriv: 2500.50, // Demo balance
+                isDemo: true
+            };
+        }
+
         if (!derivAPIInstance || !derivAPIInstance.isConnected) {
-            // Initialize with token from environment or let it fail if missing
-            const token = import.meta.env.VITE_DERIV_API_TOKEN;
-            if (!token) throw new Error("Missing Deriv API Token");
             await initializeDerivAPI(token);
         }
 
         const derivBalance = await derivAPIInstance.getBalance();
 
-        // For M-Pesa, we'll use a mock value since we don't have M-Pesa API yet
         return {
             mpesa: 1000.0, // Mock M-Pesa balance
-            deriv: derivBalance
+            deriv: derivBalance,
+            isDemo: false
         };
     } catch (error) {
         console.error('Error fetching balances:', error);
-        throw error; // Propagate error to UI
+
+        // Fallback to demo mode on error (e.g., invalid token, network issues)
+        console.warn('⚠️ Falling back to DEMO MODE due to error:', error.message);
+        return {
+            mpesa: 1000.0,
+            deriv: 2500.50,
+            isDemo: true,
+            error: error.message
+        };
     }
 }
 

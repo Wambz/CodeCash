@@ -37,6 +37,7 @@ function DashboardPage() {
                 // Fetch Balances
                 const balanceData = await getBalances();
                 setBalances(balanceData);
+                setError(null); // Clear any previous errors
 
                 // Fetch History
                 if (user?.id) {

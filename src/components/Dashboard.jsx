@@ -27,9 +27,16 @@ function Dashboard({ balances, loading, error }) {
                         <div className="flex justify-between items-start mb-6 relative z-10">
                             <div>
                                 <h3 className="text-gray-400 text-xs tracking-wider uppercase font-medium mb-3">TOTAL BALANCE</h3>
-                                <div className="inline-flex items-center gap-2 bg-[#3a1a1a]/50 px-3 py-1.5 rounded-lg border border-red-900/30">
-                                    <Wallet className="w-3.5 h-3.5 text-gray-300" />
-                                    <span className="text-xs text-white/90 font-medium">Deriv Account</span>
+                                <div className="flex items-center gap-2">
+                                    <div className="inline-flex items-center gap-2 bg-[#3a1a1a]/50 px-3 py-1.5 rounded-lg border border-red-900/30">
+                                        <Wallet className="w-3.5 h-3.5 text-gray-300" />
+                                        <span className="text-xs text-white/90 font-medium">Deriv Account</span>
+                                    </div>
+                                    {balances?.isDemo && (
+                                        <div className="inline-flex items-center gap-1 bg-yellow-500/10 px-2 py-1 rounded-lg border border-yellow-500/30">
+                                            <span className="text-xs text-yellow-500 font-bold">DEMO</span>
+                                        </div>
+                                    )}
                                 </div>
                             </div>
                             <button className="text-gray-400 p-1">
