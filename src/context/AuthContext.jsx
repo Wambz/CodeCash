@@ -17,7 +17,7 @@ export function AuthProvider({ children }) {
 
     const signIn = async (email, password) => {
         try {
-            const API_URL = import.meta.env.VITE_API_URL || 'http://127.0.0.1:5000';
+            const API_URL = import.meta.env.VITE_API_URL || import.meta.env.VITE_BACKEND_URL || 'http://127.0.0.1:5000';
             const response = await fetch(`${API_URL}/api/auth/login`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
@@ -54,7 +54,7 @@ export function AuthProvider({ children }) {
             localStorage.setItem('codecash_user', JSON.stringify(updatedUser));
 
             if (user?.id) {
-                const API_URL = import.meta.env.VITE_API_URL || 'http://127.0.0.1:5000';
+                const API_URL = import.meta.env.VITE_API_URL || import.meta.env.VITE_BACKEND_URL || 'http://127.0.0.1:5000';
                 const response = await fetch(`${API_URL}/api/auth/update`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
