@@ -29,43 +29,58 @@ function DashboardPage() {
     const { user } = useAuth();
     const navigate = useNavigate();
 
-    useEffect(() => {
-        async function fetchData() {
-            setLoading(true);
-            setError(null);
-            try {
-                // Fetch Balances
-                const balanceData = await getBalances();
+    const fetchAllData = async () => {
+        setLoading(true);
+        setError(null);
+        try {
+            // 1. Fetch Deriv Balances (Real or Mock based on token)
+            let balanceData = await getBalances();
 
-                if (balanceData.error) {
-                    setError(balanceData.error);
-                    // Still set balances to avoid null reference, but error state will take precedence in UI
-                    setBalances(balanceData);
-                } else {
-                    setBalances(balanceData);
-                    setError(null);
-                }
-
-                // Fetch History
-                if (user?.id) {
-                    try {
-                        const historyRes = await fetch(`http://127.0.0.1:5000/api/transactions/${user.id}`);
-                        const historyData = await historyRes.json();
-                        if (historyData.success) {
-                            setHistory(historyData.history);
-                        }
-                    } catch (e) {
-                        console.log("Failed to fetch API history, using local");
+            // 2. Fetch Real M-Pesa Balance from Backend
+            if (user?.id) {
+                try {
+                    const walletRes = await fetch(`${import.meta.env.VITE_BACKEND_URL}/api/wallet/${user.id}`);
+                    const walletData = await walletRes.json();
+                    if (walletData.success) {
+                        // Overwrite the mock M-Pesa balance from derivService
+                        balanceData.mpesa = walletData.wallet.balance;
                     }
+                } catch (e) {
+                    console.error("Failed to fetch wallet balance", e);
                 }
-            } catch (error) {
-                console.error("Dashboard fetch error", error);
-                setError(error.message);
-            } finally {
-                setLoading(false);
             }
+
+            if (balanceData.error) {
+                setError(balanceData.error);
+                // Still set balances to avoid null reference, but error state will take precedence in UI
+                setBalances(balanceData);
+            } else {
+                setBalances(balanceData);
+                setError(null);
+            }
+
+            // 3. Fetch History
+            if (user?.id) {
+                try {
+                    const historyRes = await fetch(`${import.meta.env.VITE_BACKEND_URL}/api/transactions/${user.id}`);
+                    const historyData = await historyRes.json();
+                    if (historyData.success) {
+                        setHistory(historyData.history);
+                    }
+                } catch (e) {
+                    console.log("Failed to fetch API history, using local");
+                }
+            }
+        } catch (error) {
+            console.error("Dashboard fetch error", error);
+            setError(error.message);
+        } finally {
+            setLoading(false);
         }
-        fetchData();
+    };
+
+    useEffect(() => {
+        fetchAllData();
     }, [user]);
 
     useEffect(() => {
@@ -148,12 +163,21 @@ function DashboardPage() {
                                         <div className="w-12 h-12 rounded-full bg-white flex items-center justify-center overflow-hidden relative">
                                             {/* Mock Flag or Icon */}
                                             {item.type === 'deposit' ? (
-                                                <div className="flex flex-col items-center justify-center w-full h-full bg-gray-100">
-                                                    <div className="w-full h-1/3 bg-black"></div>
-                                                    <div className="w-full h-1/3 bg-red-600 flex items-center justify-center">
-                                                        <div className="w-4 h-4 bg-white rounded-full opacity-80"></div>
+                                                <div className="flex flex-col items-center justify-center w-full h-full bg-white relative">
+                                                    {/* Kenya Flag Stripes */}
+                                                    <div className="w-full h-[30%] bg-black"></div>
+                                                    <div className="w-full h-[5%] bg-white"></div>
+                                                    <div className="w-full h-[30%] bg-[#BB133E]"></div>
+                                                    <div className="w-full h-[5%] bg-white"></div>
+                                                    <div className="w-full h-[30%] bg-[#006600]"></div>
+
+                                                    {/* Center Shield (simplified) */}
+                                                    <div className="absolute inset-0 flex items-center justify-center">
+                                                        <div className="w-4 h-6 bg-[#BB133E] rounded-full border border-black flex items-center justify-center overflow-hidden">
+                                                            <div className="w-0.5 h-full bg-white rotate-45"></div>
+                                                            <div className="w-0.5 h-full bg-white -rotate-45"></div>
+                                                        </div>
                                                     </div>
-                                                    <div className="w-full h-1/3 bg-green-600"></div>
                                                 </div>
                                             ) : (
                                                 <div className="w-full h-full bg-blue-500 flex items-center justify-center text-white text-xs font-bold">
@@ -196,21 +220,7 @@ function DashboardPage() {
                 <DepositModal
                     onClose={() => setShowDepositModal(false)}
                     onSuccess={async (amount) => {
-                        const data = await getBalances();
-                        setBalances(data);
-                        // Refetch History from API
-                        if (user?.id) {
-                            try {
-                                const historyRes = await fetch(`http://127.0.0.1:5000/api/transactions/${user.id}`);
-                                const historyData = await historyRes.json();
-                                if (historyData.success) {
-                                    setHistory(historyData.history);
-                                }
-                            } catch (e) {
-                                // Fallback
-                                setHistory(prev => [{ type: 'deposit', amount, status: 'success', timestamp: new Date().toISOString() }, ...prev]);
-                            }
-                        }
+                        await fetchAllData();
                     }}
                 />
             )}
@@ -218,9 +228,7 @@ function DashboardPage() {
                 <WithdrawModal
                     onClose={() => setShowWithdrawModal(false)}
                     onSuccess={async (amount) => {
-                        const data = await getBalances();
-                        setBalances(data);
-                        setHistory(prev => [{ type: 'withdraw', amount, status: 'success', timestamp: new Date().toISOString() }, ...prev]);
+                        await fetchAllData();
                     }}
                 />
             )}

@@ -16,7 +16,7 @@ function WelcomePage() {
     const [error, setError] = useState('');
     const [successMessage, setSuccessMessage] = useState('');
 
-    const { signIn } = useAuth();
+    const { signIn, resetPassword } = useAuth();
     const navigate = useNavigate();
 
     const handleLogin = async (e) => {
@@ -41,25 +41,11 @@ function WelcomePage() {
         setSuccessMessage('');
 
         try {
-            const API_URL = import.meta.env.VITE_API_URL || 'http://127.0.0.1:5000';
-            const res = await fetch(`${API_URL}/api/auth/forgot-password`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ email })
-            });
-            const data = await res.json();
-
-            if (data.success) {
-                setSuccessMessage(data.message);
-                if (data.debug_token) {
-                    console.log("DEBUG: Reset Token is", data.debug_token);
-                }
-                setTimeout(() => setView('reset'), 2000);
-            } else {
-                setError(data.message);
-            }
+            await resetPassword(email);
+            setSuccessMessage('Password reset email sent! Check your inbox.');
+            setTimeout(() => setView('login'), 3000);
         } catch (err) {
-            setError('Failed to request reset token');
+            setError('Failed to send reset email. Please try again.');
         } finally {
             setLoading(false);
         }

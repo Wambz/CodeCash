@@ -3,6 +3,7 @@ import { ArrowLeft, CreditCard, Plus } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import Dashboard from '../components/Dashboard';
 import AddPaymentModal from '../components/AddPaymentModal';
+import { useAuth } from '../context/AuthContext';
 
 function WalletPage() {
     const navigate = useNavigate();
@@ -11,8 +12,29 @@ function WalletPage() {
         { type: 'M-Pesa', id: '**** 6789', phone: '07123456789' }
     ]);
 
-    // Mock balances for reuse
-    const balances = { deriv: 500.00, mpesa: 12500.00 };
+    const [balances, setBalances] = React.useState({ deriv: 0, mpesa: 0 });
+    const [loading, setLoading] = React.useState(true);
+    const { user } = useAuth();
+
+    React.useEffect(() => {
+        if (user?.id) {
+            fetch(`${import.meta.env.VITE_BACKEND_URL}/api/wallet/${user.id}`)
+                .then(res => res.json())
+                .then(data => {
+                    if (data.success) {
+                        setBalances({
+                            deriv: data.wallet.balance || 0,
+                            mpesa: 0 // M-Pesa balance usually isn't stored, but we can set 0 or fetch from elsewhere if needed
+                        });
+                        if (data.wallet.paymentMethods) {
+                            setPaymentMethods(data.wallet.paymentMethods);
+                        }
+                    }
+                })
+                .catch(err => console.error('Failed to fetch wallet:', err))
+                .finally(() => setLoading(false));
+        }
+    }, [user]);
 
     return (
         <div className="min-h-screen bg-[#050505] text-white p-6 font-[Inter] pb-24">

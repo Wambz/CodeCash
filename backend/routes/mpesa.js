@@ -1,7 +1,7 @@
 import express from 'express';
 import stkPushService from '../services/stkPush.js';
 import b2cService from '../services/b2c.js';
-import { sql, poolPromise } from '../config/db.js';
+import { createTransaction, updateTransactionStatus } from '../services/firestore.service.js';
 
 const router = express.Router();
 
@@ -48,11 +48,9 @@ router.post('/deposit', async (req, res) => {
             ...result
         });
     } catch (error) {
-        console.error('Deposit error:', error);
-        res.status(500).json({
-            success: false,
-            message: error.message
-        });
+        console.error('STK Push Error Details:', error.response ? error.response.data : error.message);
+        console.error('Full Error:', error);
+        res.status(500).json({ success: false, message: 'Failed to initiate STK Push', error: error.message });
     }
 });
 
@@ -217,20 +215,25 @@ router.get('/status/:id', async (req, res) => {
                         console.log(`Transaction ${id} updated via query: success`);
 
                         // RECORD TO DATABASE
-                        const pool = await poolPromise;
-                        if (pool && transaction.userId) {
-                            try {
-                                await pool.request()
-                                    .input('UserId', sql.Int, transaction.userId)
-                                    .input('Type', sql.NVarChar, transaction.type)
-                                    .input('Amount', sql.Decimal(18, 2), transaction.amount)
-                                    .input('Status', sql.NVarChar, 'success')
-                                    .input('ReferenceId', sql.NVarChar, transaction.checkoutRequestId || transaction.conversationId)
-                                    .query('INSERT INTO Transactions (UserId, Type, Amount, Status, ReferenceId) VALUES (@UserId, @Type, @Amount, @Status, @ReferenceId)');
-                                console.log(`Transaction ${id} recorded to database`);
-                            } catch (dbErr) {
-                                console.error('Failed to record transaction to DB:', dbErr.message);
-                            }
+                        // RECORD TO DATABASE
+                        try {
+                            const transactionData = {
+                                userId: transaction.userId,
+                                type: transaction.type,
+                                amount: transaction.amount,
+                                status: 'success',
+                                referenceId: transaction.checkoutRequestId || transaction.conversationId,
+                                mpesaReceiptNumber: transaction.mpesaReceiptNumber || result.ResultDesc, // Fallback if missing
+                                timestamp: new Date()
+                            };
+
+                            // Use Firestore service to record
+                            const txResult = await createTransaction(transactionData);
+                            console.log(`Transaction ${id} recorded to Firestore with ID: ${txResult.id}`);
+
+                            // Also update the in-memory map if needed, or just rely on Firestore
+                        } catch (dbErr) {
+                            console.error('Failed to record transaction to Firestore:', dbErr.message);
                         }
                     } else if (result.ResultDesc.includes('still under processing')) {
                         // Keep it as pending

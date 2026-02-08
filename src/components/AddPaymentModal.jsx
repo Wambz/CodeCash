@@ -1,30 +1,47 @@
-import React, { useState } from 'react';
+import React, { useState, useContext } from 'react';
 import { X, Phone, CheckCircle, ArrowRight, Loader2 } from 'lucide-react';
+import { useAuth } from '../context/AuthContext';
 
 function AddPaymentModal({ onClose, onAdd }) {
     const [phoneNumber, setPhoneNumber] = useState('');
     const [loading, setLoading] = useState(false);
     const [success, setSuccess] = useState(false);
 
+    const { user } = useAuth();
+
     const handleSubmit = async (e) => {
         e.preventDefault();
         if (!phoneNumber) return;
 
         setLoading(true);
-        // Simulate API call
-        await new Promise(resolve => setTimeout(resolve, 1500));
 
-        setLoading(false);
-        setSuccess(true);
-
-        setTimeout(() => {
-            onAdd({
+        try {
+            const newMethod = {
                 type: 'M-Pesa',
                 id: `**** ${phoneNumber.slice(-4)}`,
-                phone: phoneNumber
-            });
-            onClose();
-        }, 1500);
+                phone: phoneNumber,
+                addedAt: new Date().toISOString()
+            };
+
+            if (user?.id) {
+                await fetch(`${import.meta.env.VITE_BACKEND_URL}/api/wallet/payment-method`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ userId: user.id, method: newMethod })
+                });
+            }
+
+            // Simulate delay for UX
+            await new Promise(resolve => setTimeout(resolve, 1000));
+
+            if (onAdd) onAdd(newMethod);
+            setSuccess(true);
+            setTimeout(() => onClose(), 1500);
+        } catch (error) {
+            console.error("Failed to add payment method", error);
+        } finally {
+            setLoading(false);
+        }
     };
 
     return (

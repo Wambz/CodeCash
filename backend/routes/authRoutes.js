@@ -1,129 +1,206 @@
 import express from 'express';
-import bcrypt from 'bcryptjs';
-import jwt from 'jsonwebtoken';
-import { sql, poolPromise } from '../config/db.js';
+import { auth, firebaseInitialized } from '../config/firebase.config.js';
+import {
+    createUserProfile,
+    getUserProfile,
+    updateUserProfile
+} from '../services/firestore.service.js';
 
 const router = express.Router();
-const JWT_SECRET = process.env.JWT_SECRET || 'your_super_secret_key';
 
-// Register
-router.post('/register', async (req, res) => {
+// Check if Firebase is available
+const checkFirebase = (req, res, next) => {
+    if (!firebaseInitialized) {
+        return res.status(503).json({
+            success: false,
+            message: 'Firebase is not configured. Please set up Firebase credentials.'
+        });
+    }
+    next();
+};
+
+// Middleware to verify Firebase ID token
+async function verifyToken(req, res, next) {
+    if (!firebaseInitialized) {
+        return res.status(503).json({
+            success: false,
+            message: 'Firebase is not configured.'
+        });
+    }
+
+    try {
+        const token = req.headers.authorization?.split('Bearer ')[1];
+        if (!token) {
+            return res.status(401).json({ success: false, message: 'No token provided' });
+        }
+
+        const decodedToken = await auth.verifyIdToken(token);
+        req.user = decodedToken;
+        next();
+    } catch (error) {
+        console.error('Token verification error:', error);
+        res.status(401).json({ success: false, message: 'Invalid token' });
+    }
+}
+
+// Register - Create user in Firebase Auth and Firestore
+router.post('/register', checkFirebase, async (req, res) => {
     try {
         const { firstName, lastName, email, password, phone } = req.body;
 
-        // Full name logic for backward compatibility or display
-        const fullName = `${firstName} ${lastName}`.trim();
+        // Create user in Firebase Auth
+        const userRecord = await auth.createUser({
+            email,
+            password,
+            displayName: `${firstName} ${lastName}`.trim(),
+        });
 
-        const hashedPassword = await bcrypt.hash(password, 10);
-        const pool = await poolPromise;
-        if (!pool) return res.status(503).json({ success: false, message: 'Database disconnected' });
+        // Create user profile in Firestore
+        await createUserProfile(userRecord.uid, {
+            firstName,
+            lastName,
+            name: `${firstName} ${lastName}`.trim(),
+            email,
+            phone,
+            avatarUrl: null
+        });
 
-        await pool.request()
-            .input('FirstName', sql.NVarChar, firstName)
-            .input('LastName', sql.NVarChar, lastName)
-            .input('Name', sql.NVarChar, fullName) // Keeping Name for compatibility if needed
-            .input('Email', sql.NVarChar, email)
-            .input('PasswordHash', sql.NVarChar, hashedPassword)
-            .input('Phone', sql.NVarChar, phone)
-            .query(`
-                INSERT INTO Users (FirstName, LastName, Name, Email, PasswordHash, Phone) 
-                VALUES (@FirstName, @LastName, @Name, @Email, @PasswordHash, @Phone)
-            `);
-
-        res.status(201).json({ success: true, message: 'User created' });
+        res.status(201).json({
+            success: true,
+            message: 'User created successfully',
+            uid: userRecord.uid
+        });
     } catch (err) {
-        console.error(err);
+        console.error('Registration error:', err);
+
+        // Handle specific Firebase errors
+        if (err.code === 'auth/email-already-exists') {
+            return res.status(400).json({ success: false, message: 'Email already in use' });
+        }
+        if (err.code === 'auth/invalid-password') {
+            return res.status(400).json({ success: false, message: 'Password must be at least 6 characters' });
+        }
+
         res.status(500).json({ success: false, message: 'Registration failed: ' + err.message });
     }
 });
 
-// Login
-router.post('/login', async (req, res) => {
+// Login - Verify Firebase token and return user profile
+// Note: Actual authentication happens client-side with Firebase Auth
+// This endpoint just validates the token and returns user profile
+router.post('/login', verifyToken, async (req, res) => {
     try {
-        const { email, password } = req.body;
-        const pool = await poolPromise;
-        if (!pool) {
-            return res.status(503).json({ success: false, message: 'Database disconnected' });
+        const uid = req.user.uid;
+
+        // Get user profile from Firestore
+        const userProfile = await getUserProfile(uid);
+
+        if (!userProfile) {
+            return res.status(404).json({ success: false, message: 'User profile not found' });
         }
-
-        const result = await pool.request()
-            .input('Email', sql.NVarChar, email)
-            .query('SELECT * FROM Users WHERE Email = @Email');
-
-        const user = result.recordset[0];
-
-        if (!user || !(await bcrypt.compare(password, user.PasswordHash))) {
-            return res.status(401).json({ success: false, message: 'Invalid credentials' });
-        }
-
-        const token = jwt.sign({ id: user.Id, email: user.Email }, JWT_SECRET, { expiresIn: '1d' });
 
         res.json({
             success: true,
-            token,
             user: {
-                id: user.Id,
-                name: user.Name, // Keep sending Name for existing frontend usage
-                firstName: user.FirstName, // Send new fields
-                lastName: user.LastName,
-                email: user.Email,
-                phone: user.Phone,
-                avatar: user.AvatarUrl
+                id: uid,
+                name: userProfile.name,
+                firstName: userProfile.firstName,
+                lastName: userProfile.lastName,
+                email: userProfile.email,
+                phone: userProfile.phone,
+                avatar: userProfile.avatarUrl
             }
         });
     } catch (err) {
-        console.error(err);
+        console.error('Login error:', err);
         res.status(500).json({ success: false, message: 'Login failed' });
     }
 });
 
-// Update Profile
-router.post('/update', async (req, res) => {
+// Get user profile (authenticated)
+router.get('/profile', verifyToken, async (req, res) => {
     try {
-        const { id, avatar } = req.body;
-        // In a real app, verify token here first
-        const pool = await poolPromise;
-        if (!pool) return res.json({ success: true, message: 'Profile updated (local only)' });
+        const uid = req.user.uid;
+        const userProfile = await getUserProfile(uid);
 
-        await pool.request()
-            .input('Id', sql.Int, id)
-            .input('AvatarUrl', sql.NVarChar, avatar)
-            .query('UPDATE Users SET AvatarUrl = @AvatarUrl WHERE Id = @Id');
+        if (!userProfile) {
+            return res.status(404).json({ success: false, message: 'User profile not found' });
+        }
+
+        res.json({
+            success: true,
+            user: {
+                id: uid,
+                name: userProfile.name,
+                firstName: userProfile.firstName,
+                lastName: userProfile.lastName,
+                email: userProfile.email,
+                phone: userProfile.phone,
+                avatar: userProfile.avatarUrl
+            }
+        });
+    } catch (err) {
+        console.error('Get profile error:', err);
+        res.status(500).json({ success: false, message: 'Failed to get profile' });
+    }
+});
+
+// Update Profile
+router.post('/update', verifyToken, async (req, res) => {
+    try {
+        const uid = req.user.uid;
+        const { avatar, firstName, lastName, phone } = req.body;
+
+        const updates = {};
+        if (avatar !== undefined) updates.avatarUrl = avatar;
+        if (firstName !== undefined) updates.firstName = firstName;
+        if (lastName !== undefined) updates.lastName = lastName;
+        if (phone !== undefined) updates.phone = phone;
+
+        // Update full name if first or last name changed
+        if (firstName || lastName) {
+            const profile = await getUserProfile(uid);
+            const newFirstName = firstName || profile.firstName;
+            const newLastName = lastName || profile.lastName;
+            updates.name = `${newFirstName} ${newLastName}`.trim();
+        }
+
+        // Update Firestore
+        await updateUserProfile(uid, updates);
+
+        // Update Firebase Auth display name and photo if provided
+        const authUpdates = {};
+        if (updates.name) authUpdates.displayName = updates.name;
+        if (avatar) authUpdates.photoURL = avatar;
+
+        if (Object.keys(authUpdates).length > 0) {
+            await auth.updateUser(uid, authUpdates);
+        }
 
         res.json({ success: true, message: 'Profile updated' });
     } catch (err) {
-        console.error(err);
+        console.error('Update profile error:', err);
         res.status(500).json({ success: false, message: 'Update failed' });
     }
 });
 
 // Change Password
-router.post('/change-password', async (req, res) => {
+router.post('/change-password', verifyToken, async (req, res) => {
     try {
-        const { userId, currentPassword, newPassword } = req.body;
-        const pool = await poolPromise;
-        if (!pool) return res.status(503).json({ success: false, message: 'Database disconnected' });
+        const uid = req.user.uid;
+        const { newPassword } = req.body;
 
-        // Get user
-        const result = await pool.request()
-            .input('Id', sql.Int, userId)
-            .query('SELECT * FROM Users WHERE Id = @Id');
+        if (!newPassword || newPassword.length < 6) {
+            return res.status(400).json({
+                success: false,
+                message: 'Password must be at least 6 characters'
+            });
+        }
 
-        const user = result.recordset[0];
-        if (!user) return res.status(404).json({ success: false, message: 'User not found' });
-
-        // Verify current password
-        const isMatch = await bcrypt.compare(currentPassword, user.PasswordHash);
-        if (!isMatch) return res.status(400).json({ success: false, message: 'Incorrect current password' });
-
-        // Hash new password
-        const hashedPassword = await bcrypt.hash(newPassword, 10);
-
-        // Update password
-        await pool.request()
-            .input('Id', sql.Int, userId)
-            .input('PasswordHash', sql.NVarChar, hashedPassword)
-            .query('UPDATE Users SET PasswordHash = @PasswordHash WHERE Id = @Id');
+        // Update password in Firebase Auth
+        await auth.updateUser(uid, {
+            password: newPassword
+        });
 
         res.json({ success: true, message: 'Password updated successfully' });
     } catch (err) {
@@ -132,83 +209,54 @@ router.post('/change-password', async (req, res) => {
     }
 });
 
-// Forgot Password - Request Token
-router.post('/forgot-password', async (req, res) => {
+// Forgot Password - Send password reset email
+router.post('/forgot-password', checkFirebase, async (req, res) => {
     try {
         const { email } = req.body;
-        const pool = await poolPromise;
-        if (!pool) return res.status(503).json({ success: false, message: 'Database disconnected' });
 
-        // Check if user exists
-        const userRes = await pool.request()
-            .input('Email', sql.NVarChar, email)
-            .query('SELECT Id, Name FROM Users WHERE Email = @Email');
+        // Generate password reset link
+        const resetLink = await auth.generatePasswordResetLink(email);
 
-        if (userRes.recordset.length === 0) {
-            // Return success even if email not found to prevent enumeration
-            return res.json({ success: true, message: 'If this email exists, a reset token has been sent.' });
-        }
+        // In production, you would send this via email
+        // For development, we'll log it and return it
+        console.log(`🔑 PASSWORD RESET LINK for ${email}:`);
+        console.log(resetLink);
 
-        // Generate Token (6 digit random)
-        const token = Math.floor(100000 + Math.random() * 900000).toString();
-        const expiresAt = new Date(Date.now() + 15 * 60 * 1000); // 15 mins
-
-        // Store Token
-        await pool.request()
-            .input('Email', sql.NVarChar, email)
-            .input('Token', sql.NVarChar, token)
-            .input('ExpiresAt', sql.DateTime, expiresAt)
-            .query('INSERT INTO PasswordResets (Email, Token, ExpiresAt) VALUES (@Email, @Token, @ExpiresAt)');
-
-        // Log Token (Simulation)
-        console.log(`🔑 PASSWORD RESET TOKEN for ${email}: ${token}`);
-
-        res.json({ success: true, message: 'Reset token sent to email.', debug_token: token });
+        res.json({
+            success: true,
+            message: 'Password reset link sent',
+            debug_link: resetLink  // Remove in production
+        });
     } catch (err) {
         console.error('Forgot password error:', err);
-        res.status(500).json({ success: false, message: 'Request failed' });
+
+        // Always return success to prevent email enumeration
+        res.json({
+            success: true,
+            message: 'If this email exists, a reset link has been sent'
+        });
     }
 });
 
-// Reset Password - Verify & Update
+// Reset Password - Handled client-side with Firebase Auth
+// This endpoint is kept for backward compatibility but not used
 router.post('/reset-password', async (req, res) => {
-    try {
-        const { email, token, newPassword } = req.body;
-        const pool = await poolPromise;
-        if (!pool) return res.status(503).json({ success: false, message: 'Database disconnected' });
+    res.json({
+        success: true,
+        message: 'Password reset should be handled client-side with Firebase Auth'
+    });
+});
 
-        // Verify Token
-        const tokenRes = await pool.request()
-            .input('Email', sql.NVarChar, email)
-            .input('Token', sql.NVarChar, token)
-            .query(`SELECT TOP 1 * FROM PasswordResets 
-                    WHERE Email = @Email AND Token = @Token 
-                    AND ExpiresAt > GETDATE()
-                    ORDER BY CreatedAt DESC`);
-
-        if (tokenRes.recordset.length === 0) {
-            return res.status(400).json({ success: false, message: 'Invalid or expired token' });
+// Verify token endpoint (for testing)
+router.get('/verify', verifyToken, (req, res) => {
+    res.json({
+        success: true,
+        user: {
+            uid: req.user.uid,
+            email: req.user.email
         }
-
-        // Hash New Password
-        const hashedPassword = await bcrypt.hash(newPassword, 10);
-
-        // Update User Password
-        await pool.request()
-            .input('Email', sql.NVarChar, email)
-            .input('PasswordHash', sql.NVarChar, hashedPassword)
-            .query('UPDATE Users SET PasswordHash = @PasswordHash WHERE Email = @Email');
-
-        // Delete used tokens for this email
-        await pool.request()
-            .input('Email', sql.NVarChar, email)
-            .query('DELETE FROM PasswordResets WHERE Email = @Email');
-
-        res.json({ success: true, message: 'Password reset successful. Please login.' });
-    } catch (err) {
-        console.error('Reset password error:', err);
-        res.status(500).json({ success: false, message: 'Reset failed' });
-    }
+    });
 });
 
 export default router;
+export { verifyToken };

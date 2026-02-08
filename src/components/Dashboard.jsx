@@ -1,7 +1,7 @@
 import React from 'react';
 import { MoreVertical, Wallet, TrendingUp, Loader2 } from 'lucide-react';
 
-function Dashboard({ balances, loading, error }) {
+function Dashboard({ balances = { deriv: 0, mpesa: 0 }, loading, error }) {
     return (
         <section className="animate-fade-in w-full">
             {loading ? (
@@ -61,7 +61,7 @@ function Dashboard({ balances, loading, error }) {
                         {/* Balance Amount */}
                         <div className="mb-6 relative z-10">
                             <h2 className="text-4xl font-bold text-white tracking-tight">
-                                ${balances.deriv.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                                ${(balances?.deriv ?? 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                             </h2>
                             {balances?.isDemo && <p className="text-yellow-500/50 text-xs mt-1">Mock Balance</p>}
                         </div>

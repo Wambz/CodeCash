@@ -5,6 +5,7 @@ import bodyParser from 'body-parser';
 import mpesaRoutes from './routes/mpesa.js';
 import authRoutes from './routes/authRoutes.js';
 import transactionRoutes from './routes/transactionRoutes.js';
+import firestoreService from './services/firestore.service.js';
 
 
 const app = express();
@@ -31,6 +32,29 @@ app.get('/health', (req, res) => {
 });
 
 // M-Pesa routes
+// Wallet Routes
+app.get('/api/wallet/:userId', async (req, res) => {
+    try {
+        const { userId } = req.params;
+        const wallet = await firestoreService.getUserWallet(userId);
+        res.json({ success: true, wallet });
+    } catch (error) {
+        res.status(500).json({ success: false, error: error.message });
+    }
+});
+
+app.post('/api/wallet/payment-method', async (req, res) => {
+    try {
+        const { userId, method } = req.body;
+        if (!userId || !method) return res.status(400).json({ success: false, message: 'Missing data' });
+
+        await firestoreService.addPaymentMethod(userId, method);
+        res.json({ success: true });
+    } catch (error) {
+        res.status(500).json({ success: false, error: error.message });
+    }
+});
+
 // Routes
 app.use('/api/mpesa', mpesaRoutes);
 app.use('/api/auth', authRoutes);

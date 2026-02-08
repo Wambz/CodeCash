@@ -38,6 +38,14 @@ class MPesaAuth {
             }
 
             console.log('Fetching new M-Pesa access token...');
+            console.log('Environment:', this.environment);
+            console.log('Consumer Key length:', this.consumerKey ? this.consumerKey.length : 0);
+            console.log('Consumer Secret length:', this.consumerSecret ? this.consumerSecret.length : 0);
+
+            // Log to file for persistence
+            const fs = await import('fs');
+            const path = await import('path');
+            fs.appendFileSync(path.join(process.cwd(), 'error.log'), `[${new Date().toISOString()}] Key Debug: Env=${this.environment}, KeyLen=${this.consumerKey?.length}, SecretLen=${this.consumerSecret?.length}\n`);
 
             // Generate Basic Auth header
             const auth = Buffer.from(`${this.consumerKey}:${this.consumerSecret}`).toString('base64');
@@ -55,8 +63,9 @@ class MPesaAuth {
             console.log('M-Pesa access token obtained successfully');
             return this.token;
         } catch (error) {
-            console.error('Error getting M-Pesa access token:', error.response?.data || error.message);
-            throw new Error('Failed to authenticate with M-Pesa API');
+            console.error('Error getting M-Pesa access token:', error.response ? error.response.data : error.message);
+            console.error('Full Auth Error:', error);
+            throw new Error('Failed to authenticate with M-Pesa API: ' + (error.response?.data?.errorMessage || error.message));
         }
     }
 

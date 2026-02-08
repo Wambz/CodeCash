@@ -1,9 +1,11 @@
 import React, { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, Link } from 'react-router-dom';
 import { Wallet } from 'lucide-react';
+import { useAuth } from '../context/AuthContext';
 
 function SignupPage() {
     const navigate = useNavigate();
+    const { signUp } = useAuth();
     const [formData, setFormData] = useState({
         firstName: '',
         lastName: '',
@@ -50,33 +52,21 @@ function SignupPage() {
         setLoading(true);
 
         try {
-            const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000';
-            const response = await fetch(`${API_URL}/api/auth/register`, {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                },
-                body: JSON.stringify({
-                    firstName: formData.firstName,
-                    lastName: formData.lastName,
-                    email: formData.email,
-                    password: formData.password,
-                    phone: formData.phone
-                }),
-            });
+            // Use Firebase Auth signUp from context
+            await signUp(
+                formData.email,
+                formData.password,
+                formData.firstName,
+                formData.lastName,
+                formData.phone
+            );
 
-            const data = await response.json();
-
-            if (data.success) {
-                // Registration successful - navigate to login or dashboard
-                alert('Account created successfully! Please log in.');
-                navigate('/');
-            } else {
-                setError(data.message || 'Registration failed. Please try again.');
-            }
+            // Registration successful - navigate to dashboard
+            alert('Account created successfully!');
+            navigate('/dashboard');
         } catch (err) {
             console.error('Signup error:', err);
-            setError('Network error. Please check your connection and try again.');
+            setError(err.message || 'Registration failed. Please try again.');
         } finally {
             setLoading(false);
         }
@@ -239,7 +229,7 @@ function SignupPage() {
                                 />
                             </div>
                             <label htmlFor="terms" className="text-xs text-gray-400">
-                                I agree to the <a href="#" className="text-red-500 hover:text-red-400 hover:underline">Terms of Service</a> and <a href="#" className="text-red-500 hover:text-red-400 hover:underline">Privacy Policy</a>.
+                                I agree to the <Link to="/terms" className="text-red-500 hover:text-red-400 hover:underline">Terms of Service</Link> and <Link to="/privacy" className="text-red-500 hover:text-red-400 hover:underline">Privacy Policy</Link>.
                             </label>
                         </div>
 
