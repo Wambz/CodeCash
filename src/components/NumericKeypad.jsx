@@ -1,12 +1,12 @@
 import React from 'react';
 import { Delete } from 'lucide-react';
 
-function NumericKeypad({ onKeyPress, onDelete }) {
+function NumericKeypad({ onKeyPress, onDelete, onClear }) {
     const keys = [
         '1', '2', '3',
         '4', '5', '6',
         '7', '8', '9',
-        '.', '0'
+        'C', '0'
     ];
 
     return (
@@ -15,8 +15,9 @@ function NumericKeypad({ onKeyPress, onDelete }) {
                 <button
                     key={key}
                     type="button"
-                    onClick={() => onKeyPress(key)}
-                    className="h-20 text-3xl font-medium text-white transition-all active:bg-white/10 flex items-center justify-center outline-none focus:outline-none"
+                    onClick={() => key === 'C' ? onClear && onClear() : onKeyPress(key)}
+                    className={`h-16 text-3xl font-medium transition-all flex items-center justify-center outline-none focus:outline-none ${key === 'C' ? 'text-red-500 active:bg-red-500/20' : 'text-white active:bg-white/10'
+                        }`}
                 >
                     {key}
                 </button>
@@ -26,7 +27,7 @@ function NumericKeypad({ onKeyPress, onDelete }) {
             <button
                 type="button"
                 onClick={onDelete}
-                className="h-20 text-white/70 transition-all active:bg-white/10 flex items-center justify-center outline-none focus:outline-none"
+                className="h-16 text-red-500 transition-all active:bg-red-500/20 flex items-center justify-center outline-none focus:outline-none"
             >
                 <Delete className="w-8 h-8" />
             </button>

@@ -230,6 +230,7 @@ function DashboardPage() {
                     onSuccess={async (amount) => {
                         await fetchAllData();
                     }}
+                    balances={balances}
                 />
             )}
         </div>

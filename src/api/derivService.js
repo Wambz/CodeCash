@@ -217,6 +217,7 @@ export async function getBalances() {
         return {
             mpesa: 1000.0, // Mock M-Pesa balance (until integrated)
             deriv: derivBalance,
+            mt5: 0.00,
             isDemo: false
         };
     } catch (error) {
