@@ -207,14 +207,16 @@ router.get('/status/:id', async (req, res) => {
                     console.log(`Transaction ${id} is pending, querying M-Pesa...`);
                     const result = await stkPushService.queryStatus(id);
 
-                    if (result.ResultCode === '0') {
+                    const resultCode = String(result.ResultCode);
+                    console.log(`Query result for ${id}: ResultCode=${resultCode}, ResultDesc=${result.ResultDesc}`);
+
+                    if (resultCode === '0') {
                         transaction.status = 'success';
-                        transaction.resultCode = result.ResultCode;
+                        transaction.resultCode = resultCode;
                         transaction.resultDesc = result.ResultDesc;
                         transaction.completedAt = new Date();
                         console.log(`Transaction ${id} updated via query: success`);
 
-                        // RECORD TO DATABASE
                         // RECORD TO DATABASE
                         try {
                             const transactionData = {
@@ -223,25 +225,30 @@ router.get('/status/:id', async (req, res) => {
                                 amount: transaction.amount,
                                 status: 'success',
                                 referenceId: transaction.checkoutRequestId || transaction.conversationId,
-                                mpesaReceiptNumber: transaction.mpesaReceiptNumber || result.ResultDesc, // Fallback if missing
+                                mpesaReceiptNumber: transaction.mpesaReceiptNumber || result.ResultDesc,
                                 timestamp: new Date()
                             };
 
-                            // Use Firestore service to record
                             const txResult = await createTransaction(transactionData);
                             console.log(`Transaction ${id} recorded to Firestore with ID: ${txResult.id}`);
-
-                            // Also update the in-memory map if needed, or just rely on Firestore
                         } catch (dbErr) {
                             console.error('Failed to record transaction to Firestore:', dbErr.message);
                         }
-                    } else if (result.ResultDesc.includes('still under processing')) {
-                        // Keep it as pending
+                    } else if (result.ResultDesc?.includes('still under processing') || result.ResultDesc?.includes('pending') || result.errorCode === '500.001.1001') {
+                        // Keep it as pending — user hasn't entered PIN yet
                         console.log(`Transaction ${id} is still under processing by Safaricom.`);
-                    } else if (result.ResultCode !== '0') {
+                    } else if (resultCode === '1032') {
+                        // User cancelled the STK Push
                         transaction.status = 'failed';
-                        transaction.resultCode = result.ResultCode;
-                        transaction.resultDesc = result.ResultDesc;
+                        transaction.resultCode = resultCode;
+                        transaction.resultDesc = 'Transaction cancelled by user.';
+                        transaction.completedAt = new Date();
+                        console.log(`Transaction ${id}: cancelled by user`);
+                    } else {
+                        // Other failure — but only mark as failed if it's a definitive error
+                        transaction.status = 'failed';
+                        transaction.resultCode = resultCode;
+                        transaction.resultDesc = result.ResultDesc || 'Transaction failed. Please try again.';
                         transaction.completedAt = new Date();
                         console.log(`Transaction ${id} updated via query: failed (${result.ResultDesc})`);
                     }
@@ -266,7 +273,7 @@ router.get('/status/:id', async (req, res) => {
                     success: true,
                     transaction: {
                         checkoutRequestId: id,
-                        status: result.ResultCode === '0' ? 'success' : 'failed',
+                        status: String(result.ResultCode) === '0' ? 'success' : 'failed',
                         resultCode: result.ResultCode,
                         resultDesc: result.ResultDesc
                     }

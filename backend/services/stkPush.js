@@ -5,6 +5,7 @@ class STKPushService {
     constructor() {
         this.environment = process.env.MPESA_ENV || 'sandbox';
         this.shortcode = process.env.MPESA_SHORTCODE;
+        this.tillNumber = process.env.MPESA_TILL_NUMBER;
         this.passkey = process.env.MPESA_PASSKEY;
         this.callbackUrl = `${process.env.MPESA_CALLBACK_BASE_URL}/api/mpesa/callback/deposit`;
     }
@@ -54,14 +55,14 @@ class STKPushService {
                 BusinessShortCode: this.shortcode,
                 Password: password,
                 Timestamp: timestamp,
-                TransactionType: 'CustomerPayBillOnline',
+                TransactionType: 'CustomerBuyGoodsOnline',
                 Amount: Math.floor(amount), // M-Pesa doesn't support decimals
                 PartyA: formattedPhone,
-                PartyB: this.shortcode,
+                PartyB: this.tillNumber, // Till Number (4262280)
                 PhoneNumber: formattedPhone,
                 CallBackURL: this.callbackUrl,
-                AccountReference: accountReference,
-                TransactionDesc: `Deposit to ${accountReference}`
+                AccountReference: formattedPhone, // Use phone number as account reference to avoid validation errors
+                TransactionDesc: `Deposit`
             };
 
             console.log('Initiating STK Push:', {
@@ -121,9 +122,18 @@ class STKPushService {
                 }
             );
 
+            console.log('Query status response:', JSON.stringify(response.data));
             return response.data;
         } catch (error) {
             console.error('Query status error:', error.response?.data || error.message);
+            // Return error data if available (M-Pesa often returns useful info in error responses)
+            if (error.response?.data) {
+                return {
+                    ResultCode: error.response.data.errorCode || 'error',
+                    ResultDesc: error.response.data.errorMessage || 'Transaction is being processed',
+                    errorCode: error.response.data.errorCode
+                };
+            }
             throw new Error('Failed to query transaction status');
         }
     }

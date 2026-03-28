@@ -1,6 +1,7 @@
 // Frontend M-Pesa Service - Calls backend API
 
 const BACKEND_URL = import.meta.env.VITE_BACKEND_URL || 'http://127.0.0.1:5000';
+console.log('M-Pesa Service using Backend URL:', BACKEND_URL);
 
 export async function initiateDeposit(phoneNumber, amount, userId) {
     try {

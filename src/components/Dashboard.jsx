@@ -1,5 +1,5 @@
 import React from 'react';
-import { MoreVertical, Wallet, TrendingUp, Loader2 } from 'lucide-react';
+import { Wallet, TrendingUp, Loader2 } from 'lucide-react';
 
 function Dashboard({ balances = { deriv: 0, mpesa: 0 }, loading, error }) {
     return (
@@ -53,9 +53,7 @@ function Dashboard({ balances = { deriv: 0, mpesa: 0 }, loading, error }) {
                                     )}
                                 </div>
                             </div>
-                            <button className="text-gray-400 p-1 hover:bg-white/5 rounded-full transition-colors">
-                                <MoreVertical className="w-5 h-5" />
-                            </button>
+
                         </div>
 
                         {/* Balance Amount */}
