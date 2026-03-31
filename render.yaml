@@ -1,0 +1,26 @@
+schemaVersion: "1"
+
+services:
+  # Backend Node.js Web Service
+  - type: web
+    name: codecash-backend
+    runtime: node
+    rootDir: backend
+    buildCommand: npm install
+    startCommand: npm start
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: PORT
+        value: 10000
+
+  # Frontend React Web Site
+  - type: static
+    name: codecash-frontend
+    rootDir: .
+    buildCommand: npm install && npm run build
+    publishPath: dist
+    routes:
+      - type: rewrite
+        source: /*
+        destination: /index.html
