@@ -256,9 +256,9 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 
 ## 👥 Team
 
-- **Project Lead** - [Your Name](https://github.com/yourusername)
-- **Lead Developer** - [Developer Name](https://github.com/developer)
-- **UI/UX Designer** - [Designer Name](https://github.com/designer)
+- **Project Lead** - [DERRICK NDAIRE WAMBUA](https://github.com/yourusername)
+- **Lead Developer** - [DERRICK NDAIRE WAMBUA](https://github.com/developer)
+- **UI/UX Designer** - [DERRICK NDAIRE WAMBUA](https://github.com/designer)
 
 ## 📞 Support
 
