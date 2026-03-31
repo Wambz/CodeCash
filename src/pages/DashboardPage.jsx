@@ -86,7 +86,7 @@ function DashboardPage() {
             if (!user.derivToken) {
                 // If no token, show connect modal
                 // But only if we are not loading initial auth
-                setShowDerivConnectModal(true);
+                // setShowDerivConnectModal(true); // DISABLED
             }
             fetchAllData();
         }
