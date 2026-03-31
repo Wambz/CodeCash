@@ -32,9 +32,12 @@ function BottomNavigation() {
             <div className="relative -top-5">
                 <button
                     onClick={() => navigate('/deposit')}
-                    className="w-14 h-14 rounded-full bg-red-600 flex items-center justify-center shadow-lg shadow-red-900/40 border-4 border-black active:scale-95 transition-transform"
+                    className="group relative overflow-hidden w-14 h-14 rounded-full bg-gradient-to-br from-green-500 to-emerald-600 flex items-center justify-center shadow-[0_8px_30px_rgba(16,185,129,0.3)] hover:shadow-[0_8px_40px_rgba(16,185,129,0.5)] hover:-translate-y-1 active:scale-[0.96] transition-all duration-300 border-4 border-[#0a0a0a]"
                 >
-                    <Plus className="w-7 h-7 text-white" />
+                    {/* Decorative background element */}
+                    <div className="absolute top-0 right-0 w-10 h-10 bg-white/20 rounded-full blur-[10px] transform translate-x-1/3 -translate-y-1/3 group-hover:scale-150 transition-transform duration-700 ease-out"></div>
+                    
+                    <Plus className="relative z-10 w-6 h-6 text-white group-hover:scale-110 group-hover:rotate-90 transition-transform duration-300" strokeWidth={3} />
                 </button>
             </div>
 

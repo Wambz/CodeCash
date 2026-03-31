@@ -204,6 +204,31 @@ export async function addPaymentMethod(userId, method) {
     }
 }
 
+/**
+ * Update user wallet balance atomically
+ * @param {string} userId - User ID
+ * @param {number} amount - Amount to add (positive) or subtract (negative)
+ */
+export async function updateWalletBalance(userId, amount) {
+    checkFirestore();
+    try {
+        const userRef = db.collection('users').doc(userId);
+
+        // Use increment for atomic update
+        await userRef.update({
+            walletBalance: admin.firestore.FieldValue.increment(amount),
+            updatedAt: new Date()
+        });
+
+        return { success: true };
+    } catch (error) {
+        console.error('Error updating wallet balance:', error);
+        // If user document doesn't exist, this will fail. 
+        // In that case, we might need to set it, but user should exist.
+        throw error;
+    }
+}
+
 export default {
     createUserProfile,
     getUserProfile,
@@ -213,5 +238,6 @@ export default {
     updateTransactionStatus,
     getTransactionByReference,
     getUserWallet,
-    addPaymentMethod
+    addPaymentMethod,
+    updateWalletBalance
 };

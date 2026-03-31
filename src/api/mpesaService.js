@@ -30,6 +30,34 @@ export async function initiateDeposit(phoneNumber, amount, userId) {
     }
 }
 
+// Deriv Deposit - Collects KSH via M-Pesa and redirects to Deriv cashier
+export async function initiateDerivDeposit(phoneNumber, amountUSD, userId) {
+    try {
+        const response = await fetch(`${BACKEND_URL}/api/mpesa/deriv-deposit`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+                phoneNumber,
+                amountUSD,
+                userId
+            })
+        });
+
+        const data = await response.json();
+
+        if (!response.ok) {
+            throw new Error(data.message || 'Failed to initiate Deriv deposit');
+        }
+
+        return data;
+    } catch (error) {
+        console.error('Deriv deposit initiation error:', error);
+        throw error;
+    }
+}
+
 export async function initiateWithdrawal(phoneNumber, amount, userId) {
     try {
         const response = await fetch(`${BACKEND_URL}/api/mpesa/withdraw`, {

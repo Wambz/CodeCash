@@ -1,13 +1,77 @@
 import express from 'express';
 import stkPushService from '../services/stkPush.js';
 import b2cService from '../services/b2c.js';
-import { createTransaction, updateTransactionStatus } from '../services/firestore.service.js';
+import { createTransaction, updateTransactionStatus, updateWalletBalance, getUserProfile } from '../services/firestore.service.js';
+import derivService from '../services/deriv.js';
 
 const router = express.Router();
+
+// ==================== CONSTANTS ====================
+const CODECASH_RATE = 133.00; // Fixed KSH per USD rate charged to users
+const DERIV_DEPOSIT_URL = 'https://app.deriv.com/cashier/deposit?account=USD';
 
 // In-memory storage for transaction status (use database in production)
 const transactions = new Map();
 
+// ==================== DERIV DEPOSIT ====================
+// Collects KSH via M-Pesa at fixed 133 KSH/USD rate, then redirects user to Deriv cashier
+router.post('/deriv-deposit', async (req, res) => {
+    try {
+        const { phoneNumber, amountUSD, userId } = req.body;
+
+        if (!phoneNumber || !amountUSD) {
+            return res.status(400).json({
+                success: false,
+                message: 'Phone number and USD amount are required'
+            });
+        }
+
+        const usdAmount = parseFloat(amountUSD);
+        if (isNaN(usdAmount) || usdAmount < 3) {
+            return res.status(400).json({
+                success: false,
+                message: 'Minimum deposit is 3 USD'
+            });
+        }
+
+        // Convert USD to KSH at CodeCash fixed rate
+        const amountKSH = Math.ceil(usdAmount * CODECASH_RATE);
+
+        console.log(`[Deriv Deposit] User ${userId}: $${usdAmount} USD → ${amountKSH} KSH @ ${CODECASH_RATE} KSH/USD`);
+
+        const result = await stkPushService.initiatePush(phoneNumber, amountKSH);
+
+        // Store transaction with deriv-deposit metadata
+        transactions.set(result.checkoutRequestId, {
+            type: 'deriv-deposit',
+            phoneNumber,
+            amount: amountKSH,
+            amountUSD: usdAmount,
+            amountKSH,
+            exchangeRate: CODECASH_RATE,
+            derivDepositUrl: DERIV_DEPOSIT_URL,
+            userId,
+            status: 'pending',
+            checkoutRequestId: result.checkoutRequestId,
+            merchantRequestId: result.merchantRequestId,
+            timestamp: new Date()
+        });
+
+        res.json({
+            success: true,
+            ...result,
+            amountKSH,
+            amountUSD: usdAmount,
+            exchangeRate: CODECASH_RATE,
+            derivDepositUrl: DERIV_DEPOSIT_URL
+        });
+    } catch (error) {
+        console.error('[Deriv Deposit] Error:', error.response ? error.response.data : error.message);
+        res.status(500).json({ success: false, message: 'Failed to initiate Deriv deposit', error: error.message });
+    }
+});
+
+// ==================== STANDARD DEPOSIT ====================
 // Deposit endpoint - Initiates STK Push
 router.post('/deposit', async (req, res) => {
     try {
@@ -103,7 +167,7 @@ router.post('/withdraw', async (req, res) => {
 });
 
 // STK Push callback
-router.post('/callback/deposit', (req, res) => {
+router.post('/callback/deposit', async (req, res) => {
     console.log('=== STK Push Callback Received ===');
     console.log(JSON.stringify(req.body, null, 2));
 
@@ -121,10 +185,88 @@ router.post('/callback/deposit', (req, res) => {
 
             if (resultCode === 0) {
                 // Success
-                transaction.status = 'success';
-                transaction.mpesaReceiptNumber = stkCallback.CallbackMetadata?.Item?.find(
-                    item => item.Name === 'MpesaReceiptNumber'
-                )?.Value;
+                if (transaction.status !== 'success') {
+                    transaction.status = 'success';
+                    transaction.mpesaReceiptNumber = stkCallback.CallbackMetadata?.Item?.find(
+                        item => item.Name === 'MpesaReceiptNumber'
+                    )?.Value;
+
+                    // RECORD TO DATABASE
+                    try {
+                        const transactionData = {
+                            userId: transaction.userId,
+                            type: transaction.type || 'deposit',
+                            amount: transaction.amount,
+                            amountUSD: transaction.amountUSD, // Include USD amount for deriv-deposit
+                            exchangeRate: transaction.exchangeRate,
+                            status: 'success',
+                            referenceId: checkoutRequestId,
+                            mpesaReceiptNumber: transaction.mpesaReceiptNumber,
+                            timestamp: new Date()
+                        };
+
+                        const txResult = await createTransaction(transactionData);
+                        console.log(`Callback: Transaction ${checkoutRequestId} recorded to Firestore with ID: ${txResult.id}`);
+
+                        // Only update wallet balance for standard deposits
+                        if (transaction.type === 'deposit') {
+                            await updateWalletBalance(transaction.userId, transaction.amount);
+                            console.log(`Callback: Wallet balance updated for user ${transaction.userId} by ${transaction.amount}`);
+                        } else if (transaction.type === 'deriv-deposit') {
+                            // AUTOMATED DERIV TRANSFER
+                            let derivFinalStatus = 'deriv-failed'; // default to failed
+                            try {
+                                console.log(`Callback: Initiating Deriv Transfer for User ${transaction.userId}`);
+
+                                // 1. Get User Profile for Token
+                                const userProfile = await getUserProfile(transaction.userId);
+
+                                if (userProfile && userProfile.derivToken) {
+                                    // 2. Resolve CR Number
+                                    console.log(`Callback: Resolving Deriv CR for token...`);
+                                    const derivAccount = await derivService.getAccountDetails(userProfile.derivToken);
+
+                                    if (derivAccount && derivAccount.loginid) {
+                                        console.log(`Callback: Resolved CR Number: ${derivAccount.loginid}. Initiating transfer of $${transaction.amountUSD}...`);
+
+                                        // 3. Execute Transfer
+                                        const transferResult = await derivService.transferFunds(derivAccount.loginid, transaction.amountUSD);
+
+                                        if (transferResult.success) {
+                                            console.log(`Callback: Deriv Transfer Success:`, transferResult);
+                                            derivFinalStatus = 'completed';
+                                        } else {
+                                            console.error(`Callback: Deriv Transfer Failed:`, transferResult);
+                                        }
+                                    } else {
+                                        console.error('Callback: Failed to resolve Deriv CR number from token.');
+                                    }
+                                } else {
+                                    console.log(`Callback: User ${transaction.userId} has no Deriv Token. Manual deposit required.`);
+                                    derivFinalStatus = 'success'; // keep as M-Pesa success, no token to try
+                                }
+                            } catch (derivErr) {
+                                console.error('Callback: Deriv Automation Error:', derivErr);
+                            }
+
+                            // ALWAYS update in-memory status (polling reads from this)
+                            transaction.status = derivFinalStatus;
+                            console.log(`Callback: Deriv automation result → ${derivFinalStatus}`);
+
+                            // Try to update Firestore (non-blocking)
+                            try {
+                                await updateTransactionStatus(checkoutRequestId, derivFinalStatus);
+                            } catch (fsErr) {
+                                console.error('Callback: Firestore status update failed (non-critical):', fsErr.message);
+                            }
+                        } else {
+                            console.log(`Callback: Skipped wallet balance update for ${transaction.type} transaction`);
+                        }
+
+                    } catch (dbErr) {
+                        console.error('Callback: Failed to record transaction/balance:', dbErr.message);
+                    }
+                }
             } else {
                 // Failed
                 transaction.status = 'failed';
@@ -135,7 +277,7 @@ router.post('/callback/deposit', (req, res) => {
             transaction.resultDesc = resultDesc;
             transaction.completedAt = new Date();
 
-            console.log(`Transaction ${checkoutRequestId} updated:`, transaction.status);
+            console.log(`Transaction ${checkoutRequestId} updated via callback:`, transaction.status);
         }
 
         // Acknowledge callback
@@ -221,8 +363,10 @@ router.get('/status/:id', async (req, res) => {
                         try {
                             const transactionData = {
                                 userId: transaction.userId,
-                                type: transaction.type,
+                                type: transaction.type || 'deposit',
                                 amount: transaction.amount,
+                                amountUSD: transaction.amountUSD,
+                                exchangeRate: transaction.exchangeRate,
                                 status: 'success',
                                 referenceId: transaction.checkoutRequestId || transaction.conversationId,
                                 mpesaReceiptNumber: transaction.mpesaReceiptNumber || result.ResultDesc,
@@ -231,6 +375,15 @@ router.get('/status/:id', async (req, res) => {
 
                             const txResult = await createTransaction(transactionData);
                             console.log(`Transaction ${id} recorded to Firestore with ID: ${txResult.id}`);
+
+                            // Only update wallet balance for standard deposits
+                            if (transaction.type === 'deposit') {
+                                await updateWalletBalance(transaction.userId, transaction.amount);
+                                console.log(`Wallet balance updated for user ${transaction.userId} by ${transaction.amount}`);
+                            } else {
+                                console.log(`Skipped wallet balance update for ${transaction.type} transaction`);
+                            }
+
                         } catch (dbErr) {
                             console.error('Failed to record transaction to Firestore:', dbErr.message);
                         }

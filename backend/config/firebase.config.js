@@ -68,6 +68,7 @@ export { firebaseInitialized };
 // Firestore settings
 if (db) {
     db.settings({
-        ignoreUndefinedProperties: true
+        ignoreUndefinedProperties: true,
+        preferRest: true
     });
 }

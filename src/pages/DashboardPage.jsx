@@ -3,9 +3,9 @@ import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { Plus, Minus, ArrowRight, Flag } from 'lucide-react';
 import Dashboard from '../components/Dashboard';
-import DepositModal from '../components/DepositModal';
-import WithdrawModal from '../components/WithdrawModal';
+import TransactionModal from '../components/TransactionModal';
 import BottomNavigation from '../components/BottomNavigation';
+import DerivConnectModal from '../components/DerivConnectModal';
 import { getBalances } from '../api/derivService';
 
 function DashboardPage() {
@@ -23,10 +23,10 @@ function DashboardPage() {
     }, [balances]);
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState(null);
-    const [showDepositModal, setShowDepositModal] = useState(false);
-    const [showWithdrawModal, setShowWithdrawModal] = useState(false);
+    const [activeTransactionTab, setActiveTransactionTab] = useState(null);
+    const [showDerivConnectModal, setShowDerivConnectModal] = useState(false);
 
-    const { user } = useAuth();
+    const { user, updateUser } = useAuth();
     const navigate = useNavigate();
 
     const fetchAllData = async () => {
@@ -34,7 +34,8 @@ function DashboardPage() {
         setError(null);
         try {
             // 1. Fetch Deriv Balances (Real or Mock based on token)
-            let balanceData = await getBalances();
+            // Use user's token if available
+            let balanceData = await getBalances(user?.derivToken);
 
             // 2. Fetch Real M-Pesa Balance from Backend
             if (user?.id) {
@@ -80,7 +81,15 @@ function DashboardPage() {
     };
 
     useEffect(() => {
-        fetchAllData();
+        if (user) {
+            // Check if user has Deriv token
+            if (!user.derivToken) {
+                // If no token, show connect modal
+                // But only if we are not loading initial auth
+                setShowDerivConnectModal(true);
+            }
+            fetchAllData();
+        }
     }, [user]);
 
     useEffect(() => {
@@ -122,26 +131,32 @@ function DashboardPage() {
 
                 {/* Big Action Buttons */}
                 <div className="grid grid-cols-2 gap-4 mb-8">
-                    {/* Deposit - Red */}
+                    {/* Deposit - Green/Emerald Gradient */}
                     <button
-                        onClick={() => setShowDepositModal(true)}
-                        className="bg-red-600 rounded-[24px] h-32 flex flex-col items-center justify-center gap-3 shadow-lg shadow-red-900/20 active:scale-98 transition-transform"
+                        onClick={() => setActiveTransactionTab('deposit')}
+                        className="group relative overflow-hidden bg-gradient-to-br from-green-500 to-emerald-600 rounded-[24px] h-32 flex flex-col items-center justify-center gap-3 shadow-[0_8px_30px_rgba(16,185,129,0.3)] hover:shadow-[0_8px_40px_rgba(16,185,129,0.5)] hover:-translate-y-1 active:scale-[0.96] transition-all duration-300"
                     >
-                        <div className="w-10 h-10 rounded-full bg-white flex items-center justify-center">
-                            <Plus className="w-6 h-6 text-red-600" strokeWidth={3} />
+                        {/* Decorative background element */}
+                        <div className="absolute top-0 right-0 w-24 h-24 bg-white/20 rounded-full blur-[20px] transform translate-x-1/3 -translate-y-1/3 group-hover:scale-150 transition-transform duration-700 ease-out"></div>
+                        
+                        <div className="relative w-12 h-12 rounded-full bg-white/20 backdrop-blur-md flex items-center justify-center group-hover:bg-white/30 transition-colors duration-300 shadow-inner border border-white/10">
+                            <Plus className="w-6 h-6 text-white group-hover:scale-110 group-hover:rotate-90 transition-transform duration-300" strokeWidth={3} />
                         </div>
-                        <span className="text-white font-bold text-lg tracking-wide">Deposit</span>
+                        <span className="relative text-white font-bold text-lg tracking-wide group-hover:translate-y-0.5 transition-transform duration-300 text-shadow-sm">Deposit</span>
                     </button>
 
-                    {/* Withdraw - Dark */}
+                    {/* Withdraw - Orange/Rose Gradient */}
                     <button
-                        onClick={() => setShowWithdrawModal(true)}
-                        className="bg-[#1c1c1e] rounded-[24px] h-32 flex flex-col items-center justify-center gap-3 border border-white/5 active:scale-98 transition-transform"
+                        onClick={() => setActiveTransactionTab('withdraw')}
+                        className="group relative overflow-hidden bg-gradient-to-br from-orange-500 to-rose-500 rounded-[24px] h-32 flex flex-col items-center justify-center gap-3 shadow-[0_8px_30px_rgba(249,115,22,0.3)] hover:shadow-[0_8px_40px_rgba(249,115,22,0.5)] hover:-translate-y-1 active:scale-[0.96] transition-all duration-300"
                     >
-                        <div className="w-10 h-10 rounded-full bg-gray-700/50 flex items-center justify-center">
-                            <Minus className="w-6 h-6 text-white" strokeWidth={3} />
+                        {/* Decorative background element */}
+                        <div className="absolute bottom-0 left-0 w-24 h-24 bg-white/20 rounded-full blur-[20px] transform -translate-x-1/3 translate-y-1/3 group-hover:scale-150 transition-transform duration-700 ease-out"></div>
+                        
+                        <div className="relative w-12 h-12 rounded-full bg-white/20 backdrop-blur-md flex items-center justify-center group-hover:bg-white/30 transition-colors duration-300 shadow-inner border border-white/10">
+                            <Minus className="w-6 h-6 text-white group-hover:scale-110 transition-transform duration-300" strokeWidth={3} />
                         </div>
-                        <span className="text-white font-bold text-lg tracking-wide">Withdraw</span>
+                        <span className="relative text-white font-bold text-lg tracking-wide group-hover:translate-y-0.5 transition-transform duration-300 text-shadow-sm">Withdraw</span>
                     </button>
                 </div>
 
@@ -216,21 +231,28 @@ function DashboardPage() {
             <BottomNavigation />
 
             {/* Modals */}
-            {showDepositModal && (
-                <DepositModal
-                    onClose={() => setShowDepositModal(false)}
-                    onSuccess={async (amount) => {
-                        await fetchAllData();
-                    }}
-                />
-            )}
-            {showWithdrawModal && (
-                <WithdrawModal
-                    onClose={() => setShowWithdrawModal(false)}
+            {activeTransactionTab && (
+                <TransactionModal
+                    initialTab={activeTransactionTab}
+                    onClose={() => setActiveTransactionTab(null)}
                     onSuccess={async (amount) => {
                         await fetchAllData();
                     }}
                     balances={balances}
+                />
+            )}
+
+            {showDerivConnectModal && (
+                <DerivConnectModal
+                    onClose={() => setShowDerivConnectModal(false)}
+                    onSuccess={async (token) => {
+                        // Token is verified by modal
+                        // Save to user profile via AuthContext (which updates Firestore)
+                        await updateUser({ derivToken: token });
+                        // Reload data
+                        await fetchAllData();
+                        setShowDerivConnectModal(false);
+                    }}
                 />
             )}
         </div>

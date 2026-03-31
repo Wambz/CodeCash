@@ -154,14 +154,22 @@ class DerivAPI {
 let derivAPIInstance = null;
 
 export async function initializeDerivAPI(apiToken) {
-    if (!derivAPIInstance) {
-        derivAPIInstance = new DerivAPI(apiToken);
+    // If we have an instance, check if it's using the same token
+    if (derivAPIInstance) {
+        if (derivAPIInstance.apiToken === apiToken) {
+            if (!derivAPIInstance.isConnected) {
+                await derivAPIInstance.connect();
+            }
+            return derivAPIInstance;
+        } else {
+            // Token changed, disconnect and create new instance
+            derivAPIInstance.disconnect();
+            derivAPIInstance = null;
+        }
     }
 
-    // Always ensure we are connected
-    if (!derivAPIInstance.isConnected) {
-        await derivAPIInstance.connect();
-    }
+    derivAPIInstance = new DerivAPI(apiToken);
+    await derivAPIInstance.connect();
     return derivAPIInstance;
 }
 
@@ -169,11 +177,12 @@ export function getDerivAPI() {
     return derivAPIInstance;
 }
 
-export async function getBalances() {
+export async function getBalances(userToken) {
     try {
-        let token = import.meta.env.VITE_DERIV_API_TOKEN;
+        // Priority: User Token -> Env Token
+        let token = userToken || import.meta.env.VITE_DERIV_API_TOKEN;
 
-        // Sanitize token: remove whitespace and potential quotes if user added them
+        // Sanitize token: remove whitespace and potential quotes
         if (token) {
             token = String(token).trim().replace(/^['"]|['"]$/g, '');
         }
@@ -233,10 +242,11 @@ export async function getBalances() {
     }
 }
 
-export async function processTransaction({ type, amount }) {
+export async function processTransaction({ type, amount, userToken }) {
     try {
-        if (!derivAPIInstance || !derivAPIInstance.isConnected) {
-            const token = import.meta.env.VITE_DERIV_API_TOKEN;
+        const token = userToken || import.meta.env.VITE_DERIV_API_TOKEN;
+
+        if (!derivAPIInstance || !derivAPIInstance.isConnected || derivAPIInstance.apiToken !== token) {
             if (!token) throw new Error('API Token not configured');
             // Constructor will sanitize it
             await initializeDerivAPI(token);

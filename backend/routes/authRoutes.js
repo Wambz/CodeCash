@@ -1,10 +1,11 @@
 import express from 'express';
-import { auth, firebaseInitialized } from '../config/firebase.config.js';
+import { auth, db, firebaseInitialized } from '../config/firebase.config.js';
 import {
     createUserProfile,
     getUserProfile,
     updateUserProfile
 } from '../services/firestore.service.js';
+import { sendOtpEmail } from '../services/email.service.js';
 
 const router = express.Router();
 
@@ -108,7 +109,10 @@ router.post('/login', verifyToken, async (req, res) => {
                 lastName: userProfile.lastName,
                 email: userProfile.email,
                 phone: userProfile.phone,
-                avatar: userProfile.avatarUrl
+                email: userProfile.email,
+                phone: userProfile.phone,
+                avatar: userProfile.avatarUrl,
+                derivToken: userProfile.derivToken
             }
         });
     } catch (err) {
@@ -136,7 +140,10 @@ router.get('/profile', verifyToken, async (req, res) => {
                 lastName: userProfile.lastName,
                 email: userProfile.email,
                 phone: userProfile.phone,
-                avatar: userProfile.avatarUrl
+                email: userProfile.email,
+                phone: userProfile.phone,
+                avatar: userProfile.avatarUrl,
+                derivToken: userProfile.derivToken
             }
         });
     } catch (err) {
@@ -149,13 +156,14 @@ router.get('/profile', verifyToken, async (req, res) => {
 router.post('/update', verifyToken, async (req, res) => {
     try {
         const uid = req.user.uid;
-        const { avatar, firstName, lastName, phone } = req.body;
+        const { avatar, firstName, lastName, phone, derivToken } = req.body;
 
         const updates = {};
         if (avatar !== undefined) updates.avatarUrl = avatar;
         if (firstName !== undefined) updates.firstName = firstName;
         if (lastName !== undefined) updates.lastName = lastName;
         if (phone !== undefined) updates.phone = phone;
+        if (derivToken !== undefined) updates.derivToken = derivToken;
 
         // Update full name if first or last name changed
         if (firstName || lastName) {
@@ -256,6 +264,115 @@ router.get('/verify', verifyToken, (req, res) => {
             email: req.user.email
         }
     });
+});
+
+// ==================== 2-STEP VERIFICATION ====================
+
+// Send OTP for 2-step verification
+router.post('/send-otp', verifyToken, async (req, res) => {
+    try {
+        const uid = req.user.uid;
+        const email = req.user.email;
+
+        // Generate 6-digit OTP
+        const otp = Math.floor(100000 + Math.random() * 900000).toString();
+
+        // Store OTP in Firestore with 5-minute expiry
+        const expiresAt = new Date(Date.now() + 5 * 60 * 1000);
+        await db.collection('otp_codes').doc(uid).set({
+            code: otp,
+            email,
+            expiresAt,
+            attempts: 0,
+            createdAt: new Date()
+        });
+
+        // Send OTP via email (also logs to console as backup)
+        await sendOtpEmail(email, otp);
+
+        res.json({
+            success: true,
+            message: 'Verification code sent to your email',
+            email: email.replace(/(.{2})(.*)(@.*)/, '$1***$3'),
+            expiresIn: 300
+        });
+    } catch (error) {
+        console.error('Send OTP error:', error);
+        res.status(500).json({ success: false, message: 'Failed to send verification code' });
+    }
+});
+
+// Verify OTP
+router.post('/verify-otp', verifyToken, async (req, res) => {
+    try {
+        const uid = req.user.uid;
+        const { code } = req.body;
+
+        if (!code || code.length !== 6) {
+            return res.status(400).json({ success: false, message: 'Please enter a valid 6-digit code' });
+        }
+
+        // Get stored OTP from Firestore
+        const otpDoc = await db.collection('otp_codes').doc(uid).get();
+
+        if (!otpDoc.exists) {
+            return res.status(400).json({
+                success: false,
+                message: 'No verification code found. Please request a new one.'
+            });
+        }
+
+        const otpData = otpDoc.data();
+
+        // Check max attempts (5)
+        if (otpData.attempts >= 5) {
+            await db.collection('otp_codes').doc(uid).delete();
+            return res.status(429).json({
+                success: false,
+                message: 'Too many attempts. Please request a new code.'
+            });
+        }
+
+        // Increment attempt count
+        await db.collection('otp_codes').doc(uid).update({
+            attempts: (otpData.attempts || 0) + 1
+        });
+
+        // Check expiry
+        const expiresAt = otpData.expiresAt.toDate
+            ? otpData.expiresAt.toDate()
+            : new Date(otpData.expiresAt);
+
+        if (new Date() > expiresAt) {
+            await db.collection('otp_codes').doc(uid).delete();
+            return res.status(400).json({
+                success: false,
+                message: 'Verification code has expired. Please request a new one.'
+            });
+        }
+
+        // Verify code
+        if (otpData.code !== code) {
+            const remaining = 5 - (otpData.attempts + 1);
+            return res.status(400).json({
+                success: false,
+                message: `Invalid code. ${remaining} attempt${remaining !== 1 ? 's' : ''} remaining.`
+            });
+        }
+
+        // Success - delete used OTP
+        await db.collection('otp_codes').doc(uid).delete();
+
+        console.log(`✅ 2FA verified for ${otpData.email}`);
+
+        res.json({
+            success: true,
+            message: 'Verification successful'
+        });
+    } catch (error) {
+        console.error('Verify OTP error:', error);
+        res.status(500).json({ success: false, message: 'Verification failed. Please try again.' });
+    }
 });
 
 export default router;

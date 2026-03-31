@@ -93,6 +93,7 @@ app.listen(PORT, () => {
     console.log('');
     console.log('Available endpoints:');
     console.log(`  POST   /api/mpesa/deposit          - Initiate STK Push`);
+    console.log(`  POST   /api/mpesa/deriv-deposit     - Deriv deposit (KSH→USD)`);
     console.log(`  POST   /api/mpesa/withdraw         - Initiate B2C transfer`);
     console.log(`  GET    /api/mpesa/status/:id       - Check transaction status`);
     console.log(`  POST   /api/mpesa/callback/deposit - STK Push callback`);
